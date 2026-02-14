@@ -1,0 +1,13 @@
+[package]
+name = "nolang-vm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Stack-based virtual machine for NoLang instruction execution"
+
+[dependencies]
+nolang-common = { path = "../common" }
+thiserror = "1"
+
+[dev-dependencies]
+proptest = "1"
