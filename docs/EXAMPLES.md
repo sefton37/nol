@@ -113,26 +113,6 @@ VARIANT_NEW VARIANT 2 0        ; 2 total tags, this is tag 0 (SOME)
 
 ; Handle the maybe
 MATCH 2                         ; match on 2 variants
-  CASE 0 3                     ; tag 0 = SOME: payload is on stack
-    BIND                        ; bind the payload
-    REF 0                       ; push payload
-    CONST I64 0 10              ; push 10
-  ; (oops, ADD needs to be inside CASE body)
-  CASE 1 1                     ; tag 1 = NONE: no payload
-    CONST I64 0 0              ; return 0
-EXHAUST
-HALT
-```
-
-**Wait — this example has a bug.** The CASE 0 body is 3 instructions but we need ADD too. Let me fix it:
-
-```nol
-; Construct SOME(5)
-CONST I64 0 5                  ; push 5 (the payload)
-VARIANT_NEW VARIANT 2 0        ; 2 total tags, this is tag 0 (SOME)
-
-; Handle the maybe
-MATCH 2                         ; match on 2 variants
   CASE 0 4                     ; tag 0 = SOME: payload is on stack, 4 instr body
     BIND                        ; bind the payload
     REF 0                       ; push payload
@@ -157,33 +137,6 @@ HALT
 ## Example 6: Recursive Factorial
 
 **Intent:** Compute factorial(5) recursively.
-
-```nol
-; Function: factorial(n)
-; if n == 0, return 1
-; else return n * factorial(n - 1)
-FUNC 1 18            ; 1 parameter, 18 instructions
-  ; Check: is n == 0?
-  REF 0              ; push n
-  CONST I64 0 0      ; push 0
-  EQ                 ; push BOOL (n == 0?)
-
-  ; Branch on the boolean
-  MATCH 2            ; match on BOOL
-    CASE 0 2         ; false: n != 0
-      NOP            ; (body below)
-      NOP
-    CASE 1 2         ; true: n == 0
-      CONST I64 0 1  ; return 1
-      NOP
-  EXHAUST
-
-  ; Wait — this structure doesn't work cleanly because we need
-  ; the false branch to do recursion. Let me restructure.
-ENDFUNC
-```
-
-**Let me write this more carefully:**
 
 ```nol
 ; Function: factorial(n) -> I64
@@ -245,11 +198,11 @@ PROJECT 1            ; extract field index 1 (second field = 7)
 HALT
 ```
 
-**Wait — need to verify the field ordering.** Per SPEC: "First popped = last field."
-So stack is [3, 7] (7 on top). Pop 7 first → field 1. Pop 3 → field 0.
-`PROJECT 1` gets field 1, which is 7. ✓
-
 **Expected output:** `I64(7)`
+
+**Notes:**
+- Field ordering: stack is [3, 7] (7 on top). Pop 7 first = field 1. Pop 3 = field 0.
+- `PROJECT 1` gets field 1 (value 7).
 
 ---
 

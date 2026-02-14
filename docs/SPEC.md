@@ -91,6 +91,8 @@ Types 0x0D–0xFF are reserved. A verifier rejects any instruction using a reser
 
 **Note:** CONST can encode values up to 32 bits. For full 64-bit constants, use CONST_EXT which consumes two instruction slots.
 
+**Sign extension:** For I64, the 32-bit value formed by `(arg1 << 16) | arg2` is **sign-extended** to 64 bits. This allows CONST to represent negative I64 values in the range -2,147,483,648 to 2,147,483,647. For U64, the 32-bit value is **zero-extended**. For F64, CONST is not valid — use CONST_EXT.
+
 ### 4.3 Arithmetic
 
 | Opcode | Value | Args | Description |
