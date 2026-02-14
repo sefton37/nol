@@ -104,6 +104,8 @@ Types 0x0D–0xFF are reserved. A verifier rejects any instruction using a reser
 | MOD    | 0x14  | -    | Pop two values, push remainder. I64/U64 only (not F64). |
 | NEG    | 0x15  | -    | Pop one value, push its negation. I64/F64 only. |
 
+**Float safety:** Any floating-point operation that produces NaN or infinity is a runtime error. The VM halts with an error including the instruction index. This guarantee means NaN and infinity never exist as values in a running NoLang program.
+
 ### 4.4 Comparison
 
 | Opcode | Value | Args | Description |

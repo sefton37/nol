@@ -1,0 +1,12 @@
+[package]
+name = "nolang-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared types and encoding for the NoLang instruction set"
+
+[dependencies]
+thiserror = "1"
+
+[dev-dependencies]
+proptest = "1"
