@@ -1,0 +1,96 @@
+# CLAUDE.md — Instructions for Claude Code
+
+## What This Project Is
+
+NoLang is a programming language designed for LLM generation, not human authorship. It has:
+- Fixed-width 64-bit instructions (no parsing ambiguity)
+- De Bruijn indices instead of variable names (no naming decisions)
+- Exactly one canonical representation for any computation (no style variance)
+- Structural verification built into the format (hash integrity, exhaustive matching, type safety)
+
+The human describes intent in natural language. The LLM generates canonical binary IR. The verifier confirms correctness. The VM executes it.
+
+## Repository Structure
+
+```
+nolang/
+├── CLAUDE.md              ← You are here
+├── README.md              ← Project overview
+├── Cargo.toml             ← Rust workspace root
+├── docs/
+│   ├── SPEC.md            ← Instruction set specification (THE source of truth)
+│   ├── ARCHITECTURE.md    ← Component relationships and interfaces
+│   ├── BUILD_ORDER.md     ← Sequenced build plan with gates
+│   └── EXAMPLES.md        ← Example programs in assembly notation
+├── crates/
+│   ├── common/            ← Shared types: opcodes, type tags, instruction encoding
+│   ├── vm/                ← Stack-based virtual machine
+│   ├── verifier/          ← Static analysis and verification
+│   └── assembler/         ← Text assembly ↔ binary translation
+└── tests/
+    ├── programs/          ← .nol assembly files for testing
+    └── corpus/            ← Verified (intent, binary) training pairs
+```
+
+## Build Order — DO NOT SKIP PHASES
+
+Development follows strict phases. **Do not begin a phase until the previous phase passes all its acceptance tests.**
+
+1. **common** — Opcode enum, TypeTag enum, Instruction struct, encode/decode
+2. **vm** — Execute instruction streams, stack management, pattern matching
+3. **verifier** — Static checks: types, exhaustion, hashes, contracts
+4. **assembler** — Text ↔ binary bidirectional translation
+5. **training** — Generate and verify (intent, IR) pairs
+
+Read `docs/BUILD_ORDER.md` for detailed acceptance criteria per phase.
+
+## Coding Conventions
+
+### Rust Style
+- Use `#[derive(Debug, Clone, PartialEq, Eq)]` on all public types
+- All public functions have doc comments
+- No `unwrap()` except in tests — use `Result` or `Option` with `?`
+- No `unsafe` blocks — correctness over performance at this stage
+- Every module has unit tests in a `#[cfg(test)] mod tests` block
+
+### Testing Requirements
+- Every opcode has at least 3 tests: valid use, edge case, rejection case
+- The verifier must never panic on any input — always return `Result`
+- Use `proptest` for property-based testing of encode/decode roundtrips
+- Assembly → binary → assembly roundtrip must be identity
+
+### Architecture Rules
+- The VM does NOT do verification. It assumes valid input. Separation of concerns.
+- The verifier does NOT execute code. It only does static analysis.
+- The assembler is a mechanical 1:1 translation. No optimization, no sugar.
+- `common` has zero dependencies except `std`.
+
+### Error Handling
+- Define error types per crate: `VmError`, `VerifyError`, `AsmError`
+- Errors carry source location (instruction index) for debugging
+- Use `thiserror` for error derives
+
+## Key Design Decisions (DO NOT CHANGE)
+
+1. **Instructions are exactly 64 bits.** No variable-length encoding.
+2. **De Bruijn indices, not names.** `REF n` means "the binding n levels up."
+3. **One canonical form.** If two instruction streams compute the same thing, they are identical.
+4. **Exhaustive pattern matching is the only control flow.** No if/else, no loops. Recursion + match.
+5. **Contracts (PRE/POST) are structural, not comments.** They are part of the instruction stream.
+6. **HASH fields are mandatory on FUNC blocks.** Computed as blake3 over the block body.
+
+## Reading Order for Context
+
+If you need to understand the project:
+1. This file (CLAUDE.md)
+2. `docs/SPEC.md` — The instruction set. This is the constitution.
+3. `docs/ARCHITECTURE.md` — How components connect.
+4. `docs/BUILD_ORDER.md` — What to build and when.
+5. `docs/EXAMPLES.md` — Concrete programs that ground the abstractions.
+
+## When In Doubt
+
+- Check SPEC.md. If the spec doesn't cover it, the answer is "don't implement it yet."
+- Prefer rejection over silent acceptance. If input might be invalid, reject it.
+- Prefer small PRs over big ones. One opcode at a time is fine.
+- Write the test first. The test is the contract.
