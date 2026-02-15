@@ -2,6 +2,8 @@
 //!
 //! Values are what live on the stack during execution.
 
+use std::fmt;
+
 use crate::type_tag::TypeTag;
 
 /// Runtime value representation.
@@ -73,6 +75,44 @@ impl PartialEq for Value {
 }
 
 impl Eq for Value {}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::I64(v) => write!(f, "I64({v})"),
+            Value::U64(v) => write!(f, "U64({v})"),
+            Value::F64(v) => write!(f, "F64({v})"),
+            Value::Bool(v) => write!(f, "Bool({v})"),
+            Value::Char(v) => write!(f, "Char('{v}')"),
+            Value::Unit => write!(f, "Unit"),
+            Value::Variant {
+                tag_count,
+                tag,
+                payload,
+            } => write!(f, "Variant({tag}/{tag_count}, {payload})"),
+            Value::Tuple(elems) => {
+                write!(f, "Tuple(")?;
+                for (i, elem) in elems.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{elem}")?;
+                }
+                write!(f, ")")
+            }
+            Value::Array(elems) => {
+                write!(f, "Array[")?;
+                for (i, elem) in elems.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{elem}")?;
+                }
+                write!(f, "]")
+            }
+        }
+    }
+}
 
 impl Value {
     /// Returns the type tag for this value.
@@ -184,6 +224,70 @@ mod tests {
         let a3 = Value::Array(vec![Value::I64(10)]);
         assert_eq!(a1, a2);
         assert_ne!(a1, a3);
+    }
+
+    #[test]
+    fn display_i64() {
+        assert_eq!(Value::I64(42).to_string(), "I64(42)");
+        assert_eq!(Value::I64(-1).to_string(), "I64(-1)");
+    }
+
+    #[test]
+    fn display_u64() {
+        assert_eq!(Value::U64(100).to_string(), "U64(100)");
+    }
+
+    #[test]
+    fn display_f64() {
+        assert_eq!(Value::F64(2.5).to_string(), "F64(2.5)");
+    }
+
+    #[test]
+    fn display_bool() {
+        assert_eq!(Value::Bool(true).to_string(), "Bool(true)");
+        assert_eq!(Value::Bool(false).to_string(), "Bool(false)");
+    }
+
+    #[test]
+    fn display_char() {
+        assert_eq!(Value::Char('a').to_string(), "Char('a')");
+    }
+
+    #[test]
+    fn display_unit() {
+        assert_eq!(Value::Unit.to_string(), "Unit");
+    }
+
+    #[test]
+    fn display_variant() {
+        let v = Value::Variant {
+            tag_count: 2,
+            tag: 0,
+            payload: Box::new(Value::I64(5)),
+        };
+        assert_eq!(v.to_string(), "Variant(0/2, I64(5))");
+    }
+
+    #[test]
+    fn display_tuple() {
+        let t = Value::Tuple(vec![Value::I64(1), Value::Bool(true)]);
+        assert_eq!(t.to_string(), "Tuple(I64(1), Bool(true))");
+    }
+
+    #[test]
+    fn display_array() {
+        let a = Value::Array(vec![Value::I64(10), Value::I64(20), Value::I64(30)]);
+        assert_eq!(a.to_string(), "Array[I64(10), I64(20), I64(30)]");
+    }
+
+    #[test]
+    fn display_empty_tuple() {
+        assert_eq!(Value::Tuple(vec![]).to_string(), "Tuple()");
+    }
+
+    #[test]
+    fn display_empty_array() {
+        assert_eq!(Value::Array(vec![]).to_string(), "Array[]");
     }
 
     #[test]

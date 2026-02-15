@@ -40,6 +40,8 @@ pub mod structural;
 pub mod types;
 
 pub use error::VerifyError;
+pub use hashing::compute_func_hash;
+pub use structural::{check_structural, FuncInfo, ProgramContext};
 
 use nolang_common::Program;
 

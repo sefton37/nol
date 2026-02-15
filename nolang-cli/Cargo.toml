@@ -1,0 +1,20 @@
+[package]
+name = "nolang-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "nolang"
+path = "src/main.rs"
+
+[dependencies]
+nolang-common = { path = "../crates/common" }
+nolang-vm = { path = "../crates/vm" }
+nolang-verifier = { path = "../crates/verifier" }
+nolang-assembler = { path = "../crates/assembler" }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

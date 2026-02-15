@@ -7,6 +7,30 @@ use crate::error::VerifyError;
 use crate::structural::ProgramContext;
 use nolang_common::Instruction;
 
+/// Compute the correct blake3 HASH instruction for a FUNC block.
+///
+/// The hash covers all instruction bytes from `func_pc` (inclusive)
+/// through the instruction before `hash_pc` (inclusive).
+/// Returns a HASH instruction with the 48-bit truncated hash.
+pub fn compute_func_hash(instrs: &[Instruction], func_pc: usize, hash_pc: usize) -> Instruction {
+    let mut data = Vec::new();
+    for instr in &instrs[func_pc..hash_pc] {
+        data.extend_from_slice(&instr.encode());
+    }
+    let hash = blake3::hash(&data);
+    let bytes = hash.as_bytes();
+    let arg1 = u16::from_be_bytes([bytes[0], bytes[1]]);
+    let arg2 = u16::from_be_bytes([bytes[2], bytes[3]]);
+    let arg3 = u16::from_be_bytes([bytes[4], bytes[5]]);
+    Instruction::new(
+        nolang_common::Opcode::Hash,
+        nolang_common::TypeTag::None,
+        arg1,
+        arg2,
+        arg3,
+    )
+}
+
 /// Run the hash verification pass.
 pub fn check_hashing(instrs: &[Instruction], ctx: &ProgramContext) -> Vec<VerifyError> {
     let mut errors = Vec::new();

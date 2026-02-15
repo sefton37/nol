@@ -4,6 +4,7 @@ members = [
     "crates/vm",
     "crates/verifier",
     "crates/assembler",
+    "nolang-cli",
 ]
 resolver = "2"
 
