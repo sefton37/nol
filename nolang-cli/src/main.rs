@@ -26,6 +26,7 @@ fn main() {
         "hash" => commands::hash(&args[2..]),
         "train" => commands::train(&args[2..]),
         "witness" => commands::witness_cmd(&args[2..]),
+        "generate" => commands::generate(&args[2..]),
         "--help" | "-h" | "help" => {
             print_usage();
             process::exit(0);
@@ -54,4 +55,5 @@ fn print_usage() {
     eprintln!("  hash <input.nol>                        Compute FUNC block hashes");
     eprintln!("  train <input.nol> --intent \"desc\"        Generate training pair");
     eprintln!("  witness <prog.nolb> <wit.json> [--func N]  Run witness tests");
+    eprintln!("  generate [--output-dir DIR] [--filter PAT]  Generate corpus programs");
 }

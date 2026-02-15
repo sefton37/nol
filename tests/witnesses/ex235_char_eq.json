@@ -1,0 +1,6 @@
+[
+  {"input": [{"Char":65}, {"Char":65}], "expected": true},
+  {"input": [{"Char":65}, {"Char":66}], "expected": false},
+  {"input": [{"Char":97}, {"Char":97}], "expected": true},
+  {"input": [{"Char":48}, {"Char":49}], "expected": false}
+]

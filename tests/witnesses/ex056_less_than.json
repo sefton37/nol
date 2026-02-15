@@ -1,0 +1,6 @@
+[
+  {"input": [3, 5], "expected": true},
+  {"input": [5, 3], "expected": false},
+  {"input": [5, 5], "expected": false},
+  {"input": [-1, 0], "expected": true}
+]

@@ -319,6 +319,81 @@ pub fn witness_cmd(args: &[String]) -> Result<(), i32> {
     }
 }
 
+/// Generate corpus programs from the catalog.
+pub fn generate(args: &[String]) -> Result<(), i32> {
+    use nolang_cli::generate::{self, GenerateConfig};
+    use std::path::PathBuf;
+
+    // Parse flags
+    let mut output_dir: Option<String> = None;
+    let mut filter: Option<String> = None;
+    let mut verbose = true; // default to verbose
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--output-dir" => {
+                if i + 1 < args.len() {
+                    output_dir = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    eprintln!("error: --output-dir requires a value");
+                    return Err(1);
+                }
+            }
+            "--filter" => {
+                if i + 1 < args.len() {
+                    filter = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    eprintln!("error: --filter requires a value");
+                    return Err(1);
+                }
+            }
+            "--quiet" | "-q" => {
+                verbose = false;
+                i += 1;
+            }
+            other => {
+                eprintln!("error: unknown flag '{other}'");
+                eprintln!("Usage: nolang generate [--output-dir DIR] [--filter PAT] [--quiet]");
+                return Err(1);
+            }
+        }
+    }
+
+    let base = output_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("tests"));
+
+    let config = GenerateConfig {
+        programs_dir: base.join("programs"),
+        witnesses_dir: base.join("witnesses"),
+        corpus_path: base.join("corpus/generated.nolt"),
+        filter,
+        verbose,
+    };
+
+    let results = generate::generate(&config).map_err(|e| {
+        eprintln!("error: {e}");
+        1
+    })?;
+
+    let success_count = results.iter().filter(|r| r.success).count();
+    let fail_count = results.len() - success_count;
+
+    if fail_count > 0 {
+        eprintln!("{fail_count} programs failed");
+        return Err(1);
+    }
+
+    if success_count == 0 && config.filter.is_none() {
+        eprintln!("warning: no programs generated (catalog may be empty)");
+    }
+
+    Ok(())
+}
+
 // --- Helpers ---
 
 /// Read and decode a .nolb binary file.
