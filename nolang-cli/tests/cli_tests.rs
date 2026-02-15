@@ -361,6 +361,225 @@ fn pipeline_ex09_abs() {
     pipeline_test("ex09_abs.nol", "I64(13)");
 }
 
+// ---- Witness ----
+
+/// Helper: assemble a .nol file, returning path to .nolb
+fn assemble_program(dir: &TempDir, nol_file: &str) -> PathBuf {
+    let nol_path = test_program(nol_file);
+    let nolb = dir.path().join("prog.nolb");
+    nolang()
+        .args([
+            "assemble",
+            nol_path.to_str().unwrap(),
+            "-o",
+            nolb.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    nolb
+}
+
+/// Return the absolute path to a witness file.
+fn test_witness(name: &str) -> PathBuf {
+    workspace_root().join("tests/witnesses").join(name)
+}
+
+#[test]
+fn witness_ex04_simple_function() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex04_simple_function.nol");
+    let witness_path = test_witness("ex04_simple_function.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_ex06_recursive_factorial() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex06_recursive_factorial.nol");
+    let witness_path = test_witness("ex06_recursive_factorial.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_ex09_abs() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex09_abs.nol");
+    let witness_path = test_witness("ex09_abs.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_failure_exits_3() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex09_abs.nol");
+    let bad_witness = dir.path().join("bad.json");
+    fs::write(&bad_witness, r#"[{"input": [5], "expected": 999}]"#).unwrap();
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            bad_witness.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .code(3)
+        .stdout(predicate::str::contains("FAIL witness 0"))
+        .stdout(predicate::str::contains("0/1 witnesses passed"));
+}
+
+#[test]
+fn witness_invalid_json_exits_1() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex09_abs.nol");
+    let bad_json = dir.path().join("bad.json");
+    fs::write(&bad_json, "not json").unwrap();
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            bad_json.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .code(1);
+}
+
+#[test]
+fn witness_missing_file_exits_1() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex09_abs.nol");
+
+    nolang()
+        .args(["witness", nolb.to_str().unwrap(), "nonexistent.json"])
+        .assert()
+        .failure()
+        .code(1);
+}
+
+#[test]
+fn witness_no_args_exits_1() {
+    nolang()
+        .arg("witness")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("Usage:"));
+}
+
+#[test]
+fn witness_with_func_flag() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex09_abs.nol");
+    let witness_path = test_witness("ex09_abs.json");
+
+    // --func 0 is the default, should work
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+            "--func",
+            "0",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_invalid_func_index_exits_1() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex09_abs.nol");
+    let witness_path = test_witness("ex09_abs.json");
+
+    // Function 99 doesn't exist
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+            "--func",
+            "99",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+}
+
+// ---- Train with witnesses ----
+
+#[test]
+fn train_with_witnesses() {
+    let witness_path = test_witness("ex09_abs.json");
+    let nol_path = test_program("ex09_abs.nol");
+
+    nolang()
+        .args([
+            "train",
+            nol_path.to_str().unwrap(),
+            "--intent",
+            "Compute absolute value",
+            "--witnesses",
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"witnesses\":"));
+}
+
+#[test]
+fn train_without_witnesses_still_works() {
+    let nol_path = test_program("ex09_abs.nol");
+
+    let output = nolang()
+        .args([
+            "train",
+            nol_path.to_str().unwrap(),
+            "--intent",
+            "Compute absolute value",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout = String::from_utf8(output).unwrap();
+    assert!(
+        !stdout.contains("\"witnesses\":"),
+        "should not contain witnesses field"
+    );
+}
+
 // ---- Disassemble roundtrip for all examples ----
 
 #[test]

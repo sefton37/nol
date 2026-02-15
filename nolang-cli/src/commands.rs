@@ -2,6 +2,8 @@
 
 use std::fs;
 
+use nolang_cli::witness;
+
 /// Assemble a .nol text file to .nolb binary.
 pub fn assemble(args: &[String]) -> Result<(), i32> {
     if args.is_empty() {
@@ -163,7 +165,9 @@ pub fn hash(args: &[String]) -> Result<(), i32> {
 pub fn train(args: &[String]) -> Result<(), i32> {
     if args.is_empty() {
         eprintln!("error: train requires an input file and --intent");
-        eprintln!("Usage: nolang train <input.nol> --intent \"description\"");
+        eprintln!(
+            "Usage: nolang train <input.nol> --intent \"description\" [--witnesses <file.json>]"
+        );
         return Err(1);
     }
 
@@ -171,6 +175,9 @@ pub fn train(args: &[String]) -> Result<(), i32> {
 
     // Parse --intent flag
     let intent = parse_intent(&args[1..])?;
+
+    // Parse optional --witnesses flag
+    let witnesses_path = parse_witnesses_flag(&args[1..])?;
 
     let text = fs::read_to_string(input).map_err(|e| {
         eprintln!("error: cannot read '{input}': {e}");
@@ -194,16 +201,122 @@ pub fn train(args: &[String]) -> Result<(), i32> {
     let b64 = base64_encode(&bytes);
     let assembly = text.trim();
 
+    // Build witnesses JSON fragment if provided
+    let witnesses_json = if let Some(ref wpath) = witnesses_path {
+        let wjson_str = fs::read_to_string(wpath).map_err(|e| {
+            eprintln!("error: cannot read '{wpath}': {e}");
+            1
+        })?;
+        // Validate the JSON is parseable
+        nolang_cli::json::parse(&wjson_str).map_err(|e| {
+            eprintln!("error: invalid witness JSON: {e}");
+            1
+        })?;
+        // Include the raw JSON content (already valid JSON)
+        Some(wjson_str.trim().to_string())
+    } else {
+        None
+    };
+
     // Format JSON manually — no serde needed
-    let json = format!(
-        "{{\"intent\":{},\"assembly\":{},\"binary_b64\":{}}}",
-        json_escape(&intent),
-        json_escape(assembly),
-        json_escape(&b64)
-    );
+    let json = if let Some(ref wjson) = witnesses_json {
+        format!(
+            "{{\"intent\":{},\"assembly\":{},\"binary_b64\":{},\"witnesses\":{}}}",
+            json_escape(&intent),
+            json_escape(assembly),
+            json_escape(&b64),
+            wjson
+        )
+    } else {
+        format!(
+            "{{\"intent\":{},\"assembly\":{},\"binary_b64\":{}}}",
+            json_escape(&intent),
+            json_escape(assembly),
+            json_escape(&b64)
+        )
+    };
 
     println!("{json}");
     Ok(())
+}
+
+/// Run witness tests against a program's function.
+pub fn witness_cmd(args: &[String]) -> Result<(), i32> {
+    if args.is_empty() {
+        eprintln!("error: witness requires a program file and a witness file");
+        eprintln!("Usage: nolang witness <program.nolb> <witnesses.json> [--func N]");
+        return Err(1);
+    }
+    if args.len() < 2 {
+        eprintln!("error: witness requires a witness JSON file");
+        eprintln!("Usage: nolang witness <program.nolb> <witnesses.json> [--func N]");
+        return Err(1);
+    }
+
+    let program_path = &args[0];
+    let witness_path = &args[1];
+
+    // Parse --func flag (default 0)
+    let func_index = parse_func_flag(&args[2..])?;
+
+    // Read program
+    let program = read_binary(program_path)?;
+
+    // Get function param types
+    let param_types = witness::get_function_param_types(&program, func_index).map_err(|e| {
+        eprintln!("error: {e}");
+        1
+    })?;
+
+    // Read and parse witness file
+    let json_str = fs::read_to_string(witness_path).map_err(|e| {
+        eprintln!("error: cannot read '{witness_path}': {e}");
+        1
+    })?;
+
+    let witnesses = witness::parse_witness_file(&json_str, &param_types).map_err(|e| {
+        eprintln!("error: {e}");
+        1
+    })?;
+
+    if witnesses.is_empty() {
+        eprintln!("warning: no witnesses found in '{witness_path}'");
+        return Ok(());
+    }
+
+    // Run witnesses
+    let results = witness::run_witnesses(&program, func_index, &witnesses);
+
+    // Print results
+    let mut pass_count = 0;
+    let total = results.len();
+
+    for result in &results {
+        if result.passed {
+            pass_count += 1;
+            println!("PASS witness {}", result.index);
+        } else if let Some(ref error) = result.error {
+            println!("FAIL witness {}: {}", result.index, error);
+        } else {
+            println!(
+                "FAIL witness {}: expected {}, got {}",
+                result.index,
+                result.expected,
+                result
+                    .actual
+                    .as_ref()
+                    .map_or("(none)".to_string(), |v| v.to_string())
+            );
+        }
+    }
+
+    println!("{pass_count}/{total} witnesses passed");
+
+    if pass_count == total {
+        Ok(())
+    } else {
+        Err(3)
+    }
 }
 
 // --- Helpers ---
@@ -237,6 +350,41 @@ fn parse_intent(args: &[String]) -> Result<String, i32> {
     eprintln!("error: --intent is required");
     eprintln!("Usage: nolang train <input.nol> --intent \"description\"");
     Err(1)
+}
+
+/// Parse the --func flag from arguments (default 0).
+fn parse_func_flag(args: &[String]) -> Result<usize, i32> {
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--func" {
+            if i + 1 < args.len() {
+                return args[i + 1].parse::<usize>().map_err(|_| {
+                    eprintln!("error: --func value must be a non-negative integer");
+                    1
+                });
+            }
+            eprintln!("error: --func requires a value");
+            return Err(1);
+        }
+        i += 1;
+    }
+    Ok(0)
+}
+
+/// Parse the --witnesses flag from arguments (optional).
+fn parse_witnesses_flag(args: &[String]) -> Result<Option<String>, i32> {
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--witnesses" {
+            if i + 1 < args.len() {
+                return Ok(Some(args[i + 1].clone()));
+            }
+            eprintln!("error: --witnesses requires a value");
+            return Err(1);
+        }
+        i += 1;
+    }
+    Ok(None)
 }
 
 /// Escape a string as a JSON string value (with quotes).

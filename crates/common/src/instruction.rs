@@ -95,6 +95,116 @@ impl Instruction {
             _ => None,
         }
     }
+
+    /// Encode a Value as one or two CONST instructions.
+    ///
+    /// Returns Ok(vec) where vec has 1 element (single CONST) or 2 elements
+    /// (CONST_EXT + NOP carrier). Returns Err for compound values that
+    /// cannot be encoded as constants (Variant, Tuple, Array).
+    pub fn from_value(value: &Value) -> Result<Vec<Instruction>, &'static str> {
+        match value {
+            Value::I64(val) => {
+                // If value fits in i32 range, use single CONST
+                if *val >= i32::MIN as i64 && *val <= i32::MAX as i64 {
+                    let val32 = *val as i32 as u32;
+                    let arg1 = (val32 >> 16) as u16;
+                    let arg2 = val32 as u16;
+                    Ok(vec![Instruction::new(
+                        Opcode::Const,
+                        TypeTag::I64,
+                        arg1,
+                        arg2,
+                        0,
+                    )])
+                } else {
+                    // Use CONST_EXT + NOP carrier
+                    let bits = *val as u64;
+                    let const_ext =
+                        Instruction::new(Opcode::ConstExt, TypeTag::I64, (bits >> 48) as u16, 0, 0);
+                    let nop_carrier = Instruction::new(
+                        Opcode::Nop,
+                        TypeTag::None,
+                        (bits >> 32) as u16,
+                        (bits >> 16) as u16,
+                        bits as u16,
+                    );
+                    Ok(vec![const_ext, nop_carrier])
+                }
+            }
+            Value::U64(val) => {
+                // If value fits in u32 range, use single CONST
+                if *val <= u32::MAX as u64 {
+                    let arg1 = (*val >> 16) as u16;
+                    let arg2 = *val as u16;
+                    Ok(vec![Instruction::new(
+                        Opcode::Const,
+                        TypeTag::U64,
+                        arg1,
+                        arg2,
+                        0,
+                    )])
+                } else {
+                    // Use CONST_EXT + NOP carrier
+                    let bits = *val;
+                    let const_ext =
+                        Instruction::new(Opcode::ConstExt, TypeTag::U64, (bits >> 48) as u16, 0, 0);
+                    let nop_carrier = Instruction::new(
+                        Opcode::Nop,
+                        TypeTag::None,
+                        (bits >> 32) as u16,
+                        (bits >> 16) as u16,
+                        bits as u16,
+                    );
+                    Ok(vec![const_ext, nop_carrier])
+                }
+            }
+            Value::F64(val) => {
+                // Reject NaN and infinity
+                if val.is_nan() {
+                    return Err("cannot encode NaN as CONST");
+                }
+                if val.is_infinite() {
+                    return Err("cannot encode infinity as CONST");
+                }
+                // F64 always uses CONST_EXT + NOP carrier
+                let bits = val.to_bits();
+                let const_ext =
+                    Instruction::new(Opcode::ConstExt, TypeTag::F64, (bits >> 48) as u16, 0, 0);
+                let nop_carrier = Instruction::new(
+                    Opcode::Nop,
+                    TypeTag::None,
+                    (bits >> 32) as u16,
+                    (bits >> 16) as u16,
+                    bits as u16,
+                );
+                Ok(vec![const_ext, nop_carrier])
+            }
+            Value::Bool(val) => Ok(vec![Instruction::new(
+                Opcode::Const,
+                TypeTag::Bool,
+                if *val { 1 } else { 0 },
+                0,
+                0,
+            )]),
+            Value::Char(val) => Ok(vec![Instruction::new(
+                Opcode::Const,
+                TypeTag::Char,
+                *val as u16,
+                0,
+                0,
+            )]),
+            Value::Unit => Ok(vec![Instruction::new(
+                Opcode::Const,
+                TypeTag::Unit,
+                0,
+                0,
+                0,
+            )]),
+            Value::Variant { .. } => Err("cannot encode compound value as CONST"),
+            Value::Tuple(_) => Err("cannot encode compound value as CONST"),
+            Value::Array(_) => Err("cannot encode compound value as CONST"),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -289,5 +399,222 @@ mod tests {
     fn const_value_on_non_const_opcode() {
         let instr = Instruction::new(Opcode::Add, TypeTag::None, 0, 0, 0);
         assert_eq!(instr.const_value(), None);
+    }
+
+    // --- from_value() tests ---
+
+    #[test]
+    fn from_value_i64_small() {
+        let instructions = Instruction::from_value(&Value::I64(42)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::I64);
+        // Roundtrip via const_value()
+        assert_eq!(instructions[0].const_value(), Some(Value::I64(42)));
+    }
+
+    #[test]
+    fn from_value_i64_negative() {
+        let instructions = Instruction::from_value(&Value::I64(-13)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::I64);
+        assert_eq!(instructions[0].const_value(), Some(Value::I64(-13)));
+    }
+
+    #[test]
+    fn from_value_i64_zero() {
+        let instructions = Instruction::from_value(&Value::I64(0)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::I64);
+        assert_eq!(instructions[0].const_value(), Some(Value::I64(0)));
+    }
+
+    #[test]
+    fn from_value_i64_min_32() {
+        let val = i32::MIN as i64;
+        let instructions = Instruction::from_value(&Value::I64(val)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::I64);
+        assert_eq!(instructions[0].const_value(), Some(Value::I64(val)));
+    }
+
+    #[test]
+    fn from_value_i64_max_32() {
+        let val = i32::MAX as i64;
+        let instructions = Instruction::from_value(&Value::I64(val)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::I64);
+        assert_eq!(instructions[0].const_value(), Some(Value::I64(val)));
+    }
+
+    #[test]
+    fn from_value_i64_needs_ext() {
+        let val = i64::MAX;
+        let instructions = Instruction::from_value(&Value::I64(val)).unwrap();
+        assert_eq!(instructions.len(), 2);
+        assert_eq!(instructions[0].opcode, Opcode::ConstExt);
+        assert_eq!(instructions[0].type_tag, TypeTag::I64);
+        assert_eq!(instructions[1].opcode, Opcode::Nop);
+        assert_eq!(instructions[1].type_tag, TypeTag::None);
+
+        // Verify encoding details
+        let bits = val as u64;
+        assert_eq!(instructions[0].arg1, (bits >> 48) as u16);
+        assert_eq!(instructions[1].arg1, (bits >> 32) as u16);
+        assert_eq!(instructions[1].arg2, (bits >> 16) as u16);
+        assert_eq!(instructions[1].arg3, bits as u16);
+    }
+
+    #[test]
+    fn from_value_i64_negative_needs_ext() {
+        let val = i32::MIN as i64 - 1;
+        let instructions = Instruction::from_value(&Value::I64(val)).unwrap();
+        assert_eq!(instructions.len(), 2);
+        assert_eq!(instructions[0].opcode, Opcode::ConstExt);
+        assert_eq!(instructions[0].type_tag, TypeTag::I64);
+        assert_eq!(instructions[1].opcode, Opcode::Nop);
+    }
+
+    #[test]
+    fn from_value_u64_small() {
+        let instructions = Instruction::from_value(&Value::U64(100)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::U64);
+        assert_eq!(instructions[0].const_value(), Some(Value::U64(100)));
+    }
+
+    #[test]
+    fn from_value_u64_max_32() {
+        let val = u32::MAX as u64;
+        let instructions = Instruction::from_value(&Value::U64(val)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::U64);
+        assert_eq!(instructions[0].const_value(), Some(Value::U64(val)));
+    }
+
+    #[test]
+    fn from_value_u64_needs_ext() {
+        let val = u64::MAX;
+        let instructions = Instruction::from_value(&Value::U64(val)).unwrap();
+        assert_eq!(instructions.len(), 2);
+        assert_eq!(instructions[0].opcode, Opcode::ConstExt);
+        assert_eq!(instructions[0].type_tag, TypeTag::U64);
+        assert_eq!(instructions[1].opcode, Opcode::Nop);
+        assert_eq!(instructions[1].type_tag, TypeTag::None);
+
+        // Verify encoding details
+        assert_eq!(instructions[0].arg1, (val >> 48) as u16);
+        assert_eq!(instructions[1].arg1, (val >> 32) as u16);
+        assert_eq!(instructions[1].arg2, (val >> 16) as u16);
+        assert_eq!(instructions[1].arg3, val as u16);
+    }
+
+    #[test]
+    fn from_value_f64() {
+        let val = 1.234;
+        let instructions = Instruction::from_value(&Value::F64(val)).unwrap();
+        assert_eq!(instructions.len(), 2);
+        assert_eq!(instructions[0].opcode, Opcode::ConstExt);
+        assert_eq!(instructions[0].type_tag, TypeTag::F64);
+        assert_eq!(instructions[1].opcode, Opcode::Nop);
+
+        // Verify encoding details
+        let bits = val.to_bits();
+        assert_eq!(instructions[0].arg1, (bits >> 48) as u16);
+        assert_eq!(instructions[1].arg1, (bits >> 32) as u16);
+        assert_eq!(instructions[1].arg2, (bits >> 16) as u16);
+        assert_eq!(instructions[1].arg3, bits as u16);
+    }
+
+    #[test]
+    fn from_value_f64_nan_rejected() {
+        let result = Instruction::from_value(&Value::F64(f64::NAN));
+        assert_eq!(result, Err("cannot encode NaN as CONST"));
+    }
+
+    #[test]
+    fn from_value_f64_infinity_rejected() {
+        let result = Instruction::from_value(&Value::F64(f64::INFINITY));
+        assert_eq!(result, Err("cannot encode infinity as CONST"));
+    }
+
+    #[test]
+    fn from_value_bool_true() {
+        let instructions = Instruction::from_value(&Value::Bool(true)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::Bool);
+        assert_eq!(instructions[0].arg1, 1);
+        assert_eq!(instructions[0].const_value(), Some(Value::Bool(true)));
+    }
+
+    #[test]
+    fn from_value_bool_false() {
+        let instructions = Instruction::from_value(&Value::Bool(false)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::Bool);
+        assert_eq!(instructions[0].arg1, 0);
+        assert_eq!(instructions[0].const_value(), Some(Value::Bool(false)));
+    }
+
+    #[test]
+    fn from_value_char() {
+        let instructions = Instruction::from_value(&Value::Char('A')).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::Char);
+        assert_eq!(instructions[0].arg1, 'A' as u16);
+        assert_eq!(instructions[0].const_value(), Some(Value::Char('A')));
+    }
+
+    #[test]
+    fn from_value_unit() {
+        let instructions = Instruction::from_value(&Value::Unit).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_eq!(instructions[0].type_tag, TypeTag::Unit);
+        assert_eq!(instructions[0].const_value(), Some(Value::Unit));
+    }
+
+    #[test]
+    fn from_value_variant_rejected() {
+        let variant = Value::Variant {
+            tag_count: 2,
+            tag: 0,
+            payload: Box::new(Value::Unit),
+        };
+        let result = Instruction::from_value(&variant);
+        assert_eq!(result, Err("cannot encode compound value as CONST"));
+    }
+
+    #[test]
+    fn from_value_tuple_rejected() {
+        let tuple = Value::Tuple(vec![Value::I64(1), Value::I64(2)]);
+        let result = Instruction::from_value(&tuple);
+        assert_eq!(result, Err("cannot encode compound value as CONST"));
+    }
+
+    #[test]
+    fn from_value_array_rejected() {
+        let array = Value::Array(vec![Value::I64(1), Value::I64(2), Value::I64(3)]);
+        let result = Instruction::from_value(&array);
+        assert_eq!(result, Err("cannot encode compound value as CONST"));
+    }
+
+    #[test]
+    fn from_value_canonical() {
+        // Canonical rule: use single CONST when value fits in 32 bits
+        // Value 42 fits in i32, so must use single CONST, not CONST_EXT
+        let instructions = Instruction::from_value(&Value::I64(42)).unwrap();
+        assert_eq!(instructions.len(), 1);
+        assert_eq!(instructions[0].opcode, Opcode::Const);
+        assert_ne!(instructions[0].opcode, Opcode::ConstExt);
     }
 }
