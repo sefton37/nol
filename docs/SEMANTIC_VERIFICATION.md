@@ -182,9 +182,9 @@ These numbers are illustrative, not measured. The actual rates depend on contrac
 |-------|--------|------|
 | 1 | Complete | `common` crate — types, encoding, decode |
 | 2 | Complete | `vm` crate — execution engine |
-| 3 | Planned | `verifier` crate — static analysis |
-| 4 | Planned | `assembler` crate — text ↔ binary |
-| 5 | Planned | CLI + integration pipeline |
+| 3 | Complete | `verifier` crate — static analysis |
+| 4 | Complete | `assembler` crate — text ↔ binary |
+| 5 | Complete | CLI + integration pipeline |
 
 ### Extended Phases (new)
 
