@@ -28,7 +28,9 @@ pub struct CallFrame {
 pub struct FunctionInfo {
     /// Number of parameters (from FUNC arg1).
     pub param_count: u16,
-    /// Instruction index where the function body starts (after PRE/POST blocks).
+    /// Parameter types from PARAM instructions.
+    pub param_types: Vec<nolang_common::TypeTag>,
+    /// Instruction index where the function body starts (after PARAM/PRE/POST blocks).
     pub body_start_pc: usize,
     /// PRE condition blocks: (start_pc, len).
     pub pre_conditions: Vec<(usize, u16)>,
@@ -82,10 +84,17 @@ impl<'a> VM<'a> {
                 let param_count = instrs[pc].arg1;
                 let body_len = instrs[pc].arg2 as usize;
 
-                // Scan PRE/POST blocks starting after FUNC
+                // Scan PARAM/PRE/POST blocks starting after FUNC
+                let mut param_types = Vec::new();
                 let mut pre_conditions = Vec::new();
                 let mut post_conditions = Vec::new();
                 let mut scan_pc = pc + 1;
+
+                // Skip PARAM instructions
+                while scan_pc < instrs.len() && instrs[scan_pc].opcode == Opcode::Param {
+                    param_types.push(instrs[scan_pc].type_tag);
+                    scan_pc += 1;
+                }
 
                 while scan_pc < instrs.len() {
                     match instrs[scan_pc].opcode {
@@ -105,6 +114,7 @@ impl<'a> VM<'a> {
 
                 self.functions.push(FunctionInfo {
                     param_count,
+                    param_types,
                     body_start_pc: scan_pc,
                     pre_conditions,
                     post_conditions,

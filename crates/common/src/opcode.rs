@@ -90,6 +90,8 @@ pub enum Opcode {
     Recurse = 0x55,
     /// End of function block.
     EndFunc = 0x56,
+    /// Declare parameter type. One per parameter, at start of FUNC body.
+    Param = 0x57,
 
     // 4.8 Data Construction
     /// Construct variant value. arg1 = total_tags, arg2 = this_tag.
@@ -121,7 +123,7 @@ pub enum Opcode {
 }
 
 /// All valid opcodes, in definition order. Useful for exhaustive testing.
-pub const ALL_OPCODES: [Opcode; 44] = [
+pub const ALL_OPCODES: [Opcode; 45] = [
     Opcode::Bind,
     Opcode::Ref,
     Opcode::Drop,
@@ -155,6 +157,7 @@ pub const ALL_OPCODES: [Opcode; 44] = [
     Opcode::Call,
     Opcode::Recurse,
     Opcode::EndFunc,
+    Opcode::Param,
     Opcode::VariantNew,
     Opcode::TupleNew,
     Opcode::Project,
@@ -221,6 +224,7 @@ impl TryFrom<u8> for Opcode {
             0x54 => Ok(Opcode::Call),
             0x55 => Ok(Opcode::Recurse),
             0x56 => Ok(Opcode::EndFunc),
+            0x57 => Ok(Opcode::Param),
 
             // 4.8 Data Construction
             0x60 => Ok(Opcode::VariantNew),
@@ -241,7 +245,7 @@ impl TryFrom<u8> for Opcode {
 
             // All remaining values are reserved (SPEC.md Section 4.11).
             // This covers 0x06..=0x0F, 0x16..=0x1F, 0x26..=0x2F, 0x36..=0x3F,
-            // 0x43..=0x4F, 0x57..=0x5F, 0x66..=0x6F, 0x73..=0x7F, 0x80..=0xFD.
+            // 0x43..=0x4F, 0x58..=0x5F, 0x66..=0x6F, 0x73..=0x7F, 0x80..=0xFD.
             _ => Err(DecodeError::ReservedOpcode(value)),
         }
     }
@@ -284,6 +288,7 @@ impl Opcode {
             Opcode::Call => "CALL",
             Opcode::Recurse => "RECURSE",
             Opcode::EndFunc => "ENDFUNC",
+            Opcode::Param => "PARAM",
             Opcode::VariantNew => "VARIANT_NEW",
             Opcode::TupleNew => "TUPLE_NEW",
             Opcode::Project => "PROJECT",
@@ -306,7 +311,7 @@ mod tests {
 
     #[test]
     fn all_opcodes_count() {
-        assert_eq!(ALL_OPCODES.len(), 44);
+        assert_eq!(ALL_OPCODES.len(), 45);
     }
 
     #[test]
@@ -379,7 +384,7 @@ mod tests {
 
     #[test]
     fn reserved_function_range() {
-        for byte in 0x57..=0x5Fu8 {
+        for byte in 0x58..=0x5Fu8 {
             assert_eq!(
                 Opcode::try_from(byte),
                 Err(DecodeError::ReservedOpcode(byte))

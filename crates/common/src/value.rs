@@ -99,7 +99,7 @@ mod tests {
     fn type_tags() {
         assert_eq!(Value::I64(42).type_tag(), TypeTag::I64);
         assert_eq!(Value::U64(42).type_tag(), TypeTag::U64);
-        assert_eq!(Value::F64(3.14).type_tag(), TypeTag::F64);
+        assert_eq!(Value::F64(1.5).type_tag(), TypeTag::F64);
         assert_eq!(Value::Bool(true).type_tag(), TypeTag::Bool);
         assert_eq!(Value::Char('a').type_tag(), TypeTag::Char);
         assert_eq!(Value::Unit.type_tag(), TypeTag::Unit);
@@ -124,8 +124,8 @@ mod tests {
 
     #[test]
     fn equality_f64_normal() {
-        assert_eq!(Value::F64(3.14), Value::F64(3.14));
-        assert_ne!(Value::F64(3.14), Value::F64(2.71));
+        assert_eq!(Value::F64(1.5), Value::F64(1.5));
+        assert_ne!(Value::F64(1.5), Value::F64(2.5));
     }
 
     #[test]

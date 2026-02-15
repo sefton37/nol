@@ -74,7 +74,8 @@ HALT
 
 ```nol
 ; Function: double(x) = x + x
-FUNC 1 7             ; 1 parameter, 7 instructions in body
+FUNC 1 8             ; 1 parameter, 8 instructions in body
+  PARAM I64          ; parameter 0 is I64
   PRE 3              ; precondition: 3 instructions
     REF 0            ; push the parameter
     TYPEOF I64       ; check type (pushes BOOL, pops+repushes value)
@@ -142,7 +143,8 @@ HALT
 ; Function: factorial(n) -> I64
 ; Base case: n <= 1 → return 1
 ; Recursive: n * factorial(n-1)
-FUNC 1 17            ; 1 parameter, 17 instructions in body
+FUNC 1 18            ; 1 parameter, 18 instructions in body
+  PARAM I64          ; parameter 0 is I64
   ; Compare n <= 1
   REF 0              ; push n
   CONST I64 0 1      ; push 1
@@ -232,7 +234,8 @@ HALT
 
 ```nol
 ; Function: abs(x) -> I64
-FUNC 1 19
+FUNC 1 20
+  PARAM I64                    ; parameter 0 is I64
   PRE 3                        ; input is I64
     REF 0
     TYPEOF I64

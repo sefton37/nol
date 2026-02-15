@@ -3,7 +3,7 @@
 //! This crate provides the foundational data structures for the NoLang
 //! instruction set:
 //!
-//! - [`Opcode`] — all 44 opcodes from SPEC.md Section 4
+//! - [`Opcode`] — all 45 opcodes from SPEC.md Section 4
 //! - [`TypeTag`] — all 13 type tags from SPEC.md Section 3
 //! - [`Instruction`] — the 64-bit instruction struct with encode/decode
 //! - [`Value`] — runtime value representation for the VM stack

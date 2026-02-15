@@ -160,10 +160,14 @@ Types 0x0D–0xFF are reserved. A verifier rejects any instruction using a reser
 | CALL     | 0x54  | arg1=func_ref               | Call the function at de Bruijn index `arg1`. Arguments must already be on the stack. |
 | RECURSE  | 0x55  | arg1=depth_limit            | Recursive call to the enclosing function. `arg1` is the maximum recursion depth. Exceeding it is a runtime error, not undefined behavior. |
 | ENDFUNC  | 0x56  | -                           | End of function block. |
+| PARAM    | 0x57  | type_tag=param_type         | Declare parameter type. One per parameter, at start of FUNC body (before PRE). PARAM count must equal FUNC param_count. |
 
 **Function structure (must appear in this exact order):**
 ```
 FUNC param_count body_len
+  PARAM type_tag_0         (one per parameter, matching param_count)
+  PARAM type_tag_1
+  ...
   PRE condition_len        (0 or more PRE blocks)
     ...condition...
   POST condition_len       (0 or more POST blocks)
@@ -173,6 +177,8 @@ FUNC param_count body_len
   HASH hash_value
 ENDFUNC
 ```
+
+PARAM instructions are included in body_len count.
 
 ### 4.8 Data Construction
 
@@ -210,7 +216,7 @@ ENDFUNC
 | 0x26–0x2F   | Reserved: future comparison |
 | 0x36–0x3F   | Reserved: future logic ops  |
 | 0x43–0x4F   | Reserved: future control flow |
-| 0x57–0x5F   | Reserved: future function ops |
+| 0x58–0x5F   | Reserved: future function ops |
 | 0x66–0x6F   | Reserved: future data ops   |
 | 0x73–0x7F   | Reserved: future meta ops   |
 | 0x80–0xFD   | Reserved: future expansion  |

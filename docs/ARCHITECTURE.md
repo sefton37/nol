@@ -106,6 +106,8 @@ That's it. Three crates depend on `common`. No crate depends on another non-comm
    - No nested FUNC blocks
    - CASE branches in ascending tag order
    - Unused arg fields are zero
+   - PARAM count equals FUNC param_count
+   - PARAMs appear before PRE/POST in function body
 
 2. **Type safety**
    - Every REF resolves to a valid binding

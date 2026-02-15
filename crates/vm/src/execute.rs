@@ -112,7 +112,8 @@ impl<'a> VM<'a> {
                 Opcode::ArrayLen => self.exec_array_len()?,
 
                 // Group F: Meta
-                Opcode::Hash => {} // NOP during execution (verification only)
+                Opcode::Param => {} // NOP during execution (verifier uses it)
+                Opcode::Hash => {}  // NOP during execution (verification only)
                 Opcode::Assert => self.exec_assert()?,
                 Opcode::Typeof => self.exec_typeof(&instr)?,
             }
@@ -126,7 +127,9 @@ impl<'a> VM<'a> {
                 // Shouldn't happen in PRE/POST, but don't panic
                 Ok(())
             }
-            Opcode::Nop | Opcode::Hash | Opcode::EndFunc | Opcode::Exhaust => Ok(()),
+            Opcode::Nop | Opcode::Hash | Opcode::Param | Opcode::EndFunc | Opcode::Exhaust => {
+                Ok(())
+            }
             Opcode::Const => self.exec_const(instr),
             Opcode::ConstExt => self.exec_const_ext(instr),
             Opcode::Bind => self.exec_bind(),
