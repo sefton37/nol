@@ -206,6 +206,45 @@ impl<'a> TypeChecker<'a> {
                     }
                     pc += 1;
                 }
+                Opcode::Implies => {
+                    // Pop two BOOLs, push BOOL
+                    if self.stack.len() >= 2 {
+                        let b = self.stack.pop().unwrap();
+                        let a = self.stack.pop().unwrap();
+                        if a != TypeTag::Bool && a != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Bool,
+                                found: a,
+                            });
+                        }
+                        if b != TypeTag::Bool && b != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Bool,
+                                found: b,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Bool);
+                    pc += 1;
+                }
+                Opcode::Forall => {
+                    // Pop array, skip body, push Bool
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Array && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Array,
+                                found: tt,
+                            });
+                        }
+                    }
+                    let body_len = instr.arg1 as usize;
+                    pc += 1 + body_len; // Skip FORALL + body
+                    self.stack.push(TypeTag::Bool);
+                    continue; // Don't increment pc again
+                }
                 Opcode::Match => {
                     // Pop the matched value, proceed into CASE bodies
                     // We skip the match block for type checking — case bodies

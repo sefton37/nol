@@ -99,6 +99,18 @@ fn condition_produces_bool(
                 let val = stack.pop().unwrap_or(TypeTag::None);
                 stack.push(val);
             }
+            Opcode::Implies => {
+                stack.pop(); // consequent
+                stack.pop(); // antecedent
+                stack.push(TypeTag::Bool);
+            }
+            Opcode::Forall => {
+                stack.pop(); // array
+                             // Skip body instructions in simulation
+                let body_len = instr.arg1 as usize;
+                pc += body_len;
+                stack.push(TypeTag::Bool);
+            }
             Opcode::Typeof => {
                 // Non-destructive: push Bool
                 stack.push(TypeTag::Bool);

@@ -70,6 +70,7 @@ impl<'a> VM<'a> {
                 Opcode::Xor => self.exec_logic_xor()?,
                 Opcode::Shl => self.exec_shift_left()?,
                 Opcode::Shr => self.exec_shift_right()?,
+                Opcode::Implies => self.exec_implies()?,
 
                 // Group C: Pattern matching
                 Opcode::Match => self.exec_match(&instr)?,
@@ -116,6 +117,7 @@ impl<'a> VM<'a> {
                 Opcode::Hash => {}  // NOP during execution (verification only)
                 Opcode::Assert => self.exec_assert()?,
                 Opcode::Typeof => self.exec_typeof(&instr)?,
+                Opcode::Forall => self.exec_forall(&instr)?,
             }
         }
     }
@@ -165,6 +167,7 @@ impl<'a> VM<'a> {
             Opcode::Xor => self.exec_logic_xor(),
             Opcode::Shl => self.exec_shift_left(),
             Opcode::Shr => self.exec_shift_right(),
+            Opcode::Implies => self.exec_implies(),
             Opcode::Match => self.exec_match(instr),
             Opcode::Case => {
                 let body_len = instr.arg2 as usize;
@@ -195,15 +198,20 @@ impl<'a> VM<'a> {
             Opcode::ArrayLen => self.exec_array_len(),
             Opcode::Assert => self.exec_assert(),
             Opcode::Typeof => self.exec_typeof(instr),
+            Opcode::Forall => self.exec_forall(instr),
         }
     }
 
-    /// Execute a range of instructions (for PRE/POST contract evaluation).
+    /// Execute a range of instructions (for PRE/POST contract evaluation and FORALL).
+    ///
+    /// Uses PC-based bounds instead of counting iterations, so opcodes like
+    /// FORALL that advance PC past their body work correctly.
     fn execute_range(&mut self, start_pc: usize, len: u16) -> Result<(), RuntimeError> {
         let saved_pc = self.pc;
         self.pc = start_pc;
+        let end_pc = start_pc + len as usize;
 
-        for _ in 0..len {
+        while self.pc < end_pc {
             let instr = *self.fetch()?;
             self.pc += 1;
             self.execute_one(&instr)?;
@@ -499,6 +507,48 @@ impl<'a> VM<'a> {
         };
 
         self.push(result)
+    }
+
+    fn exec_implies(&mut self) -> Result<(), RuntimeError> {
+        let consequent = self.pop()?;
+        let antecedent = self.pop()?;
+
+        match (antecedent, consequent) {
+            (Value::Bool(a), Value::Bool(b)) => self.push(Value::Bool(!a || b)),
+            _ => Err(RuntimeError::TypeMismatch { at: self.pc - 1 }),
+        }
+    }
+
+    fn exec_forall(&mut self, instr: &Instruction) -> Result<(), RuntimeError> {
+        let body_len = instr.arg1;
+        let body_start = self.pc; // PC is already past FORALL instruction
+
+        let array = self.pop()?;
+        let elements = match array {
+            Value::Array(elems) => elems,
+            _ => return Err(RuntimeError::TypeMismatch { at: self.pc - 1 }),
+        };
+
+        let mut result = true;
+        for elem in &elements {
+            self.bindings.push(elem.clone());
+            self.execute_range(body_start, body_len)?;
+            let condition = self.pop()?;
+            self.bindings.pop();
+            match condition {
+                Value::Bool(b) => {
+                    if !b {
+                        result = false;
+                        break;
+                    }
+                }
+                _ => return Err(RuntimeError::TypeMismatch { at: self.pc - 1 }),
+            }
+        }
+
+        // Skip past body instructions
+        self.pc = body_start + body_len as usize;
+        self.push(Value::Bool(result))
     }
 
     // ---- Group C: Pattern Matching ----

@@ -127,6 +127,7 @@ Types 0x0D–0xFF are reserved. A verifier rejects any instruction using a reser
 | XOR    | 0x33  | -    | Bitwise XOR for integers. Logical XOR for BOOL. |
 | SHL    | 0x34  | -    | Shift left. Pop shift amount, pop value, push result. |
 | SHR    | 0x35  | -    | Shift right (arithmetic for I64, logical for U64). |
+| IMPLIES | 0x36 | -    | Pop two BOOLs (consequent then antecedent), push BOOL (!antecedent \|\| consequent). Logical implication. |
 
 ### 4.6 Control Flow — Pattern Matching
 
@@ -198,6 +199,17 @@ PARAM instructions are included in body_len count.
 | HASH    | 0x70  | arg1, arg2, arg3  | The 48-bit truncated blake3 hash of all instructions in the enclosing FUNC block (excluding the HASH instruction itself and ENDFUNC). Concatenate arg1, arg2, arg3 as big-endian for the 48-bit value. |
 | ASSERT  | 0x71  | -                 | Pop BOOL from stack. If false, runtime error with instruction index. |
 | TYPEOF  | 0x72  | arg1=expected_tag | Pop value, push BOOL (1 if value's type tag matches `arg1`). Non-destructive: value is pushed back. |
+| FORALL  | 0x73  | arg1=body_len     | Pop array, execute next `body_len` instructions for each element (bound at de Bruijn index 0), AND all results. Push BOOL. Empty array → true (vacuous truth). Short-circuits on first false. |
+
+**FORALL semantics:**
+1. Pop array from stack.
+2. For each element in the array:
+   a. Bind element as de Bruijn index 0 (existing bindings shift up by 1).
+   b. Execute the next `body_len` instructions.
+   c. Pop BOOL from stack. If false, short-circuit and push false.
+   d. Remove the element binding.
+3. If all iterations produced true (or array was empty), push true.
+4. Advance PC past the body instructions (they are consumed by FORALL).
 
 ### 4.10 VM Control
 
@@ -214,11 +226,11 @@ PARAM instructions are included in body_len count.
 | 0x06–0x0F   | Reserved: future binding ops |
 | 0x16–0x1F   | Reserved: future arithmetic |
 | 0x26–0x2F   | Reserved: future comparison |
-| 0x36–0x3F   | Reserved: future logic ops  |
+| 0x37–0x3F   | Reserved: future logic ops  |
 | 0x43–0x4F   | Reserved: future control flow |
 | 0x58–0x5F   | Reserved: future function ops |
 | 0x66–0x6F   | Reserved: future data ops   |
-| 0x73–0x7F   | Reserved: future meta ops   |
+| 0x74–0x7F   | Reserved: future meta ops   |
 | 0x80–0xFD   | Reserved: future expansion  |
 
 Any instruction with a reserved opcode is rejected by the verifier.

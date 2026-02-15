@@ -40,6 +40,7 @@ pub fn disassemble(program: &Program) -> String {
             | Opcode::Xor
             | Opcode::Shl
             | Opcode::Shr
+            | Opcode::Implies
             | Opcode::ArrayGet
             | Opcode::ArrayLen
             | Opcode::Assert
@@ -56,7 +57,8 @@ pub fn disassemble(program: &Program) -> String {
             | Opcode::Recurse
             | Opcode::Project
             | Opcode::Pre
-            | Opcode::Post => {
+            | Opcode::Post
+            | Opcode::Forall => {
                 format!("{} {}", instr.opcode.mnemonic(), instr.arg1)
             }
 

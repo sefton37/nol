@@ -66,6 +66,8 @@ pub enum Opcode {
     Shl = 0x34,
     /// Shift right (arithmetic for I64, logical for U64).
     Shr = 0x35,
+    /// Logical implication. Pop two BOOLs, push !antecedent || consequent.
+    Implies = 0x36,
 
     // 4.6 Control Flow — Pattern Matching
     /// Begin pattern match block. arg1 = variant_count.
@@ -114,6 +116,8 @@ pub enum Opcode {
     Assert = 0x71,
     /// Pop value, push BOOL (type check). Non-destructive: value is pushed back.
     Typeof = 0x72,
+    /// Universal quantifier for arrays. Pop array, execute body for each element.
+    Forall = 0x73,
 
     // 4.10 VM Control
     /// Stop execution. Top of stack is the program result.
@@ -123,7 +127,7 @@ pub enum Opcode {
 }
 
 /// All valid opcodes, in definition order. Useful for exhaustive testing.
-pub const ALL_OPCODES: [Opcode; 45] = [
+pub const ALL_OPCODES: [Opcode; 47] = [
     Opcode::Bind,
     Opcode::Ref,
     Opcode::Drop,
@@ -147,6 +151,7 @@ pub const ALL_OPCODES: [Opcode; 45] = [
     Opcode::Xor,
     Opcode::Shl,
     Opcode::Shr,
+    Opcode::Implies,
     Opcode::Match,
     Opcode::Case,
     Opcode::Exhaust,
@@ -167,6 +172,7 @@ pub const ALL_OPCODES: [Opcode; 45] = [
     Opcode::Hash,
     Opcode::Assert,
     Opcode::Typeof,
+    Opcode::Forall,
     Opcode::Halt,
     Opcode::Nop,
 ];
@@ -210,6 +216,7 @@ impl TryFrom<u8> for Opcode {
             0x33 => Ok(Opcode::Xor),
             0x34 => Ok(Opcode::Shl),
             0x35 => Ok(Opcode::Shr),
+            0x36 => Ok(Opcode::Implies),
 
             // 4.6 Control Flow
             0x40 => Ok(Opcode::Match),
@@ -238,14 +245,15 @@ impl TryFrom<u8> for Opcode {
             0x70 => Ok(Opcode::Hash),
             0x71 => Ok(Opcode::Assert),
             0x72 => Ok(Opcode::Typeof),
+            0x73 => Ok(Opcode::Forall),
 
             // 4.10 VM Control
             0xFE => Ok(Opcode::Halt),
             0xFF => Ok(Opcode::Nop),
 
             // All remaining values are reserved (SPEC.md Section 4.11).
-            // This covers 0x06..=0x0F, 0x16..=0x1F, 0x26..=0x2F, 0x36..=0x3F,
-            // 0x43..=0x4F, 0x58..=0x5F, 0x66..=0x6F, 0x73..=0x7F, 0x80..=0xFD.
+            // This covers 0x06..=0x0F, 0x16..=0x1F, 0x26..=0x2F, 0x37..=0x3F,
+            // 0x43..=0x4F, 0x58..=0x5F, 0x66..=0x6F, 0x74..=0x7F, 0x80..=0xFD.
             _ => Err(DecodeError::ReservedOpcode(value)),
         }
     }
@@ -278,6 +286,7 @@ impl Opcode {
             Opcode::Xor => "XOR",
             Opcode::Shl => "SHL",
             Opcode::Shr => "SHR",
+            Opcode::Implies => "IMPLIES",
             Opcode::Match => "MATCH",
             Opcode::Case => "CASE",
             Opcode::Exhaust => "EXHAUST",
@@ -298,6 +307,7 @@ impl Opcode {
             Opcode::Hash => "HASH",
             Opcode::Assert => "ASSERT",
             Opcode::Typeof => "TYPEOF",
+            Opcode::Forall => "FORALL",
             Opcode::Halt => "HALT",
             Opcode::Nop => "NOP",
         }
@@ -311,7 +321,7 @@ mod tests {
 
     #[test]
     fn all_opcodes_count() {
-        assert_eq!(ALL_OPCODES.len(), 45);
+        assert_eq!(ALL_OPCODES.len(), 47);
     }
 
     #[test]
@@ -364,7 +374,7 @@ mod tests {
 
     #[test]
     fn reserved_logic_range() {
-        for byte in 0x36..=0x3Fu8 {
+        for byte in 0x37..=0x3Fu8 {
             assert_eq!(
                 Opcode::try_from(byte),
                 Err(DecodeError::ReservedOpcode(byte))
@@ -404,7 +414,7 @@ mod tests {
 
     #[test]
     fn reserved_meta_range() {
-        for byte in 0x73..=0x7Fu8 {
+        for byte in 0x74..=0x7Fu8 {
             assert_eq!(
                 Opcode::try_from(byte),
                 Err(DecodeError::ReservedOpcode(byte))

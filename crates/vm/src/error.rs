@@ -87,6 +87,10 @@ pub enum RuntimeError {
     /// CALL or RECURSE references a function that doesn't exist.
     #[error("unknown function at binding index {index} at instruction {at}")]
     UnknownFunction { at: usize, index: u16 },
+
+    /// Type mismatch: expected a specific type but got something else.
+    #[error("type mismatch at instruction {at}")]
+    TypeMismatch { at: usize },
 }
 
 #[cfg(test)]

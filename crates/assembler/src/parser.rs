@@ -78,6 +78,7 @@ pub(crate) fn parse_line(
         | Opcode::Xor
         | Opcode::Shl
         | Opcode::Shr
+        | Opcode::Implies
         | Opcode::ArrayGet
         | Opcode::ArrayLen
         | Opcode::Assert
@@ -103,7 +104,8 @@ pub(crate) fn parse_line(
         | Opcode::Recurse
         | Opcode::Project
         | Opcode::Pre
-        | Opcode::Post => {
+        | Opcode::Post
+        | Opcode::Forall => {
             let arg1 = expect_u16(args, 0, line_num, opcode.mnemonic(), 1)?;
             expect_end(&args[1..], line_num)?;
             Ok(Some(ParseResult::Single(Instruction::new(

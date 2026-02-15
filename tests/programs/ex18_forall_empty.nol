@@ -1,0 +1,7 @@
+; Empty array: FORALL should return true (vacuous truth)
+ARRAY_NEW I64 0
+FORALL 3
+REF 0
+CONST I64 0x0000 0x0064
+GT
+HALT

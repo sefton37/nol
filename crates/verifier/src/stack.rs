@@ -103,9 +103,26 @@ fn check_range(
                 depth -= delta; // undo delta
                 continue;
             }
+            Opcode::Call => {
+                // CALL pops param_count args, pushes 1 return value.
+                // stack_delta returned 0, so undo that and apply correct delta.
+                let func_index = instr.arg1 as usize;
+                if let Some(func) = ctx.functions.get(func_index) {
+                    let correct_delta = -(func.param_count as i64) + 1;
+                    depth += correct_delta; // delta was 0, so just add the correct one
+                }
+                pc += 1;
+                continue;
+            }
             Opcode::Ret => {
                 // End of function — return value should be on stack
                 return;
+            }
+            Opcode::Forall => {
+                // FORALL consumes body_len instructions after itself
+                let body_len = instr.arg1 as usize;
+                pc += 1 + body_len;
+                continue;
             }
             _ => {}
         }
@@ -159,6 +176,7 @@ fn stack_pops(instr: &Instruction) -> usize {
         | Opcode::Xor
         | Opcode::Shl
         | Opcode::Shr
+        | Opcode::Implies
         | Opcode::ArrayGet => 2,
 
         // Special
@@ -169,6 +187,7 @@ fn stack_pops(instr: &Instruction) -> usize {
         Opcode::Project => 1,  // Pop tuple, push field
         Opcode::TupleNew => 0, // Dynamic (field_count)
         Opcode::ArrayNew => 0, // Dynamic (length)
+        Opcode::Forall => 1,   // Pop array
     }
 }
 
@@ -210,7 +229,8 @@ fn stack_delta(instr: &Instruction) -> i64 {
         | Opcode::Or
         | Opcode::Xor
         | Opcode::Shl
-        | Opcode::Shr => -1,
+        | Opcode::Shr
+        | Opcode::Implies => -1,
 
         // Pop 1, push 1 → 0
         Opcode::Neg | Opcode::Not => 0,
@@ -241,6 +261,9 @@ fn stack_delta(instr: &Instruction) -> i64 {
         // We approximate as 0 since we handle it specially
         Opcode::Call => 0,
         Opcode::Recurse => 0,
+
+        // FORALL: pop 1 (array), push 1 (Bool) → 0
+        Opcode::Forall => 0,
     }
 }
 

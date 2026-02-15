@@ -348,7 +348,7 @@ fn roundtrip_const_ext_zero() {
 }
 
 #[test]
-fn roundtrip_all_45_opcodes() {
+fn roundtrip_all_47_opcodes() {
     // Build a program containing every opcode with valid arguments,
     // disassemble it, reassemble, and check binary equality.
     let instrs = vec![
@@ -373,6 +373,7 @@ fn roundtrip_all_45_opcodes() {
         Instruction::new(Opcode::Xor, TypeTag::None, 0, 0, 0),
         Instruction::new(Opcode::Shl, TypeTag::None, 0, 0, 0),
         Instruction::new(Opcode::Shr, TypeTag::None, 0, 0, 0),
+        Instruction::new(Opcode::Implies, TypeTag::None, 0, 0, 0),
         Instruction::new(Opcode::ArrayGet, TypeTag::None, 0, 0, 0),
         Instruction::new(Opcode::ArrayLen, TypeTag::None, 0, 0, 0),
         Instruction::new(Opcode::Assert, TypeTag::None, 0, 0, 0),
@@ -388,6 +389,7 @@ fn roundtrip_all_45_opcodes() {
         Instruction::new(Opcode::Project, TypeTag::None, 2, 0, 0),
         Instruction::new(Opcode::Pre, TypeTag::None, 3, 0, 0),
         Instruction::new(Opcode::Post, TypeTag::None, 4, 0, 0),
+        Instruction::new(Opcode::Forall, TypeTag::None, 3, 0, 0),
         // Pattern C opcodes
         Instruction::new(Opcode::Func, TypeTag::None, 1, 8, 0),
         Instruction::new(Opcode::Case, TypeTag::None, 0, 2, 0),

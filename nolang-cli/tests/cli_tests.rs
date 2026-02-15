@@ -361,6 +361,56 @@ fn pipeline_ex09_abs() {
     pipeline_test("ex09_abs.nol", "I64(13)");
 }
 
+#[test]
+fn pipeline_ex10_abs_rich() {
+    pipeline_test("ex10_abs_rich.nol", "I64(13)");
+}
+
+#[test]
+fn pipeline_ex11_max() {
+    pipeline_test("ex11_max.nol", "I64(5)");
+}
+
+#[test]
+fn pipeline_ex12_clamp() {
+    pipeline_test("ex12_clamp.nol", "I64(5)");
+}
+
+#[test]
+fn pipeline_ex13_sign() {
+    pipeline_test("ex13_sign.nol", "I64(1)");
+}
+
+#[test]
+fn pipeline_ex14_min() {
+    pipeline_test("ex14_min.nol", "I64(3)");
+}
+
+#[test]
+fn pipeline_ex15_is_positive() {
+    pipeline_test("ex15_is_positive.nol", "Bool(true)");
+}
+
+#[test]
+fn pipeline_ex16_all_positive() {
+    pipeline_test("ex16_all_positive.nol", "Bool(true)");
+}
+
+#[test]
+fn pipeline_ex17_forall_bounded() {
+    pipeline_test("ex17_forall_bounded.nol", "Bool(true)");
+}
+
+#[test]
+fn pipeline_ex18_forall_empty() {
+    pipeline_test("ex18_forall_empty.nol", "Bool(true)");
+}
+
+#[test]
+fn pipeline_ex19_forall_fails() {
+    pipeline_test("ex19_forall_fails.nol", "Bool(false)");
+}
+
 // ---- Witness ----
 
 /// Helper: assemble a .nol file, returning path to .nolb
@@ -423,6 +473,108 @@ fn witness_ex09_abs() {
     let dir = TempDir::new().unwrap();
     let nolb = assemble_program(&dir, "ex09_abs.nol");
     let witness_path = test_witness("ex09_abs.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_ex10_abs_rich() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex10_abs_rich.nol");
+    let witness_path = test_witness("ex10_abs_rich.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_ex11_max() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex11_max.nol");
+    let witness_path = test_witness("ex11_max.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_ex12_clamp() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex12_clamp.nol");
+    let witness_path = test_witness("ex12_clamp.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("5/5 witnesses passed"));
+}
+
+#[test]
+fn witness_ex13_sign() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex13_sign.nol");
+    let witness_path = test_witness("ex13_sign.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("5/5 witnesses passed"));
+}
+
+#[test]
+fn witness_ex14_min() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex14_min.nol");
+    let witness_path = test_witness("ex14_min.json");
+
+    nolang()
+        .args([
+            "witness",
+            nolb.to_str().unwrap(),
+            witness_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("4/4 witnesses passed"));
+}
+
+#[test]
+fn witness_ex15_is_positive() {
+    let dir = TempDir::new().unwrap();
+    let nolb = assemble_program(&dir, "ex15_is_positive.nol");
+    let witness_path = test_witness("ex15_is_positive.json");
 
     nolang()
         .args([

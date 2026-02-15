@@ -284,10 +284,14 @@ fn check_unused_fields(instr: &Instruction, at: usize, errors: &mut Vec<VerifyEr
             (false, false, false, false)
         }
 
-        // Logic & Bitwise (no args)
-        Opcode::And | Opcode::Or | Opcode::Not | Opcode::Xor | Opcode::Shl | Opcode::Shr => {
-            (false, false, false, false)
-        }
+        // Logic & Bitwise (no args, except IMPLIES which also has no args)
+        Opcode::And
+        | Opcode::Or
+        | Opcode::Not
+        | Opcode::Xor
+        | Opcode::Shl
+        | Opcode::Shr
+        | Opcode::Implies => (false, false, false, false),
 
         // Pattern Matching
         Opcode::Match => (false, true, false, false),
@@ -316,6 +320,7 @@ fn check_unused_fields(instr: &Instruction, at: usize, errors: &mut Vec<VerifyEr
         Opcode::Hash => (false, true, true, true), // All 3 args are the hash
         Opcode::Assert => (false, false, false, false),
         Opcode::Typeof => (false, true, false, false),
+        Opcode::Forall => (false, true, false, false), // arg1 = body_len
 
         // VM Control
         Opcode::Halt => (false, false, false, false),
