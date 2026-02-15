@@ -1,0 +1,15 @@
+[package]
+name = "nolang-assembler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Bidirectional text assembly ↔ binary translation for NoLang"
+
+[dependencies]
+nolang-common = { path = "../common" }
+thiserror = "1"
+
+[dev-dependencies]
+nolang-verifier = { path = "../verifier" }
+nolang-vm = { path = "../vm" }
+blake3 = "1"
