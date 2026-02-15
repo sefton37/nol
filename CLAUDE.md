@@ -20,8 +20,9 @@ nolang/
 ├── docs/
 │   ├── SPEC.md            ← Instruction set specification (THE source of truth)
 │   ├── ARCHITECTURE.md    ← Component relationships and interfaces
-│   ├── BUILD_ORDER.md     ← Sequenced build plan with gates
-│   └── EXAMPLES.md        ← Example programs in assembly notation
+│   ├── BUILD_ORDER.md     ← Sequenced build plan with gates (Phases 1-8)
+│   ├── EXAMPLES.md        ← Example programs in assembly notation
+│   └── SEMANTIC_VERIFICATION.md ← Layered verification architecture
 ├── crates/
 │   ├── common/            ← Shared types: opcodes, type tags, instruction encoding
 │   ├── vm/                ← Stack-based virtual machine
@@ -40,9 +41,13 @@ Development follows strict phases. **Do not begin a phase until the previous pha
 2. **vm** — Execute instruction streams, stack management, pattern matching
 3. **verifier** — Static checks: types, exhaustion, hashes, contracts
 4. **assembler** — Text ↔ binary bidirectional translation
-5. **training** — Generate and verify (intent, IR) pairs
+5. **training** — CLI + integration pipeline, generate and verify (intent, IR) pairs
+6. **semantic layers** — Rich contracts, witness format + runner, corpus of 200+ programs
+7. **LLM integration** — Intent → program generation, program → description, comparison UI
+8. **feedback loop** — Contract violations, witness failures, and human rejections as training signal
 
 Read `docs/BUILD_ORDER.md` for detailed acceptance criteria per phase.
+See `docs/SEMANTIC_VERIFICATION.md` for the architectural rationale behind Phases 6-8.
 
 ## Coding Conventions
 
@@ -85,8 +90,9 @@ If you need to understand the project:
 1. This file (CLAUDE.md)
 2. `docs/SPEC.md` — The instruction set. This is the constitution.
 3. `docs/ARCHITECTURE.md` — How components connect.
-4. `docs/BUILD_ORDER.md` — What to build and when.
+4. `docs/BUILD_ORDER.md` — What to build and when (Phases 1-8).
 5. `docs/EXAMPLES.md` — Concrete programs that ground the abstractions.
+6. `docs/SEMANTIC_VERIFICATION.md` — Layered verification architecture for Phases 6-8.
 
 ## When In Doubt
 

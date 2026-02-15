@@ -37,14 +37,15 @@ Because the IR is canonical, verification is cheap. Because verification is chea
 
 ## Current State
 
-Building the foundation: VM, verifier, assembler, and training pipeline. See [BUILD_ORDER.md](docs/BUILD_ORDER.md) for the sequenced plan.
+Foundation complete (Phases 1-5): common types, VM, verifier, assembler, and CLI/training pipeline. Next: semantic verification layers — contracts, witnesses, LLM integration, and feedback loops (Phases 6-8). See [BUILD_ORDER.md](docs/BUILD_ORDER.md) for the full sequenced plan.
 
 ## Documentation
 
 - [SPEC.md](docs/SPEC.md) — Instruction set specification (the source of truth)
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — Component design and interfaces
-- [BUILD_ORDER.md](docs/BUILD_ORDER.md) — What to build and when
+- [BUILD_ORDER.md](docs/BUILD_ORDER.md) — What to build and when (Phases 1-8)
 - [EXAMPLES.md](docs/EXAMPLES.md) — Example programs in assembly notation
+- [SEMANTIC_VERIFICATION.md](docs/SEMANTIC_VERIFICATION.md) — Layered verification architecture (rationale for Phases 6-8)
 
 ## License
 

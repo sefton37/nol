@@ -1,5 +1,7 @@
 # Semantic Verification Architecture
 
+> See `BUILD_ORDER.md` for the full implementation timeline (Phases 1-8). See `ARCHITECTURE.md` for the mechanical component design.
+
 ## The Problem NoLang Solves — And The Problem That Remains
 
 NoLang's verifier eliminates **mechanical errors**: type mismatches, stack imbalances, non-exhaustive pattern matches, structural malformations. If the verifier returns `Ok(())`, an entire category of failure cannot happen. This is the foundation.

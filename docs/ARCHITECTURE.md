@@ -9,7 +9,7 @@
                     └──────────┬──────────┘
                                │
                     ┌──────────▼──────────┐
-                    │   LLM Generator     │  (Future: Phase 5)
+                    │   LLM Generator     │  (Future: Phase 7)
                     │  Intent → Binary IR │
                     └──────────┬──────────┘
                                │
@@ -273,8 +273,24 @@ Raw concatenation of 8-byte instructions. File size must be a multiple of 8. No 
 UTF-8 text in the assembly format described above.
 
 ### Training pair files (.nolt)
-JSON lines format:
+JSON lines format. Current (Phases 1-5):
 ```json
 {"intent": "Add two integers and return the sum", "assembly": "FUNC 2 8\n  ...", "binary_b64": "AQAA..."}
 ```
+
+Extended format (Phase 6+) adds contracts and witnesses:
+```json
+{
+  "intent": "Compute absolute value of an integer",
+  "assembly": "FUNC 1 20\n  ...",
+  "binary_b64": "AQAA...",
+  "contracts": ["if input >= 0 then result == input", "result >= 0"],
+  "witnesses": [{"input": [5], "expected": 5}, {"input": [-13], "expected": 13}]
+}
+```
+
 One pair per line. `binary_b64` is base64-encoded binary.
+
+## Extended Architecture (Phases 6-8)
+
+This document covers the mechanical foundation (Phases 1-5). For the semantic verification layers that build on top — rich contracts, witnesses, LLM integration, and feedback loops — see `SEMANTIC_VERIFICATION.md` for the architecture and `BUILD_ORDER.md` for the implementation timeline.
