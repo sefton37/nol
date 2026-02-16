@@ -1,0 +1,56 @@
+# LoRA configuration for Phase 7b: Assembly → Description
+# Fine-tunes Llama 3.1 8B Instruct to describe NoLang assembly in plain English.
+
+model:
+  base: "meta-llama/Llama-3.1-8B-Instruct"
+  fallback: "codellama/CodeLlama-7b-Instruct-hf"
+  max_length: 2048
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+training:
+  num_epochs: 3
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  eval_steps: 100
+  save_steps: 100
+  logging_steps: 10
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  fp16: false
+  bf16: true
+  dataloader_num_workers: 4
+
+inference:
+  temperature: 0.7
+  top_p: 0.9
+  max_new_tokens: 512
+  do_sample: true  # sampling for natural language diversity
+
+output_dir: "models/7b_asm_to_desc"

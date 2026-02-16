@@ -1,0 +1,11 @@
+torch>=2.2
+transformers>=4.37
+peft>=0.8
+datasets>=2.16
+accelerate>=0.26
+bitsandbytes>=0.42
+sentencepiece
+pyyaml
+tqdm
+rouge-score
+nltk

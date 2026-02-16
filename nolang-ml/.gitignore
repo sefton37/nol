@@ -1,0 +1,15 @@
+models/
+data/splits/
+outputs/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+wandb/
+*.pt
+*.bin
+*.safetensors
