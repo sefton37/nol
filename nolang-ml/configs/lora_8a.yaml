@@ -1,0 +1,60 @@
+# LoRA configuration for Phase 8a: Feedback-loop retraining (Intent → Assembly)
+# Conservative overrides to prevent catastrophic forgetting while incorporating
+# error-corrected training signal from Phase 7 evaluation failures.
+
+model:
+  base: "meta-llama/Llama-3.1-8B-Instruct"
+  fallback: "codellama/CodeLlama-7b-Instruct-hf"
+  max_length: 2048
+
+# Start from Phase 7 adapter rather than base model
+base_adapter_path: "models/7a_intent_to_asm/final"
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+training:
+  num_epochs: 1          # Single pass — prevent forgetting
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 5.0e-5  # 1/4 of Phase 7 — conservative
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1      # Longer warmup for stability
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  eval_steps: 50
+  save_steps: 50
+  logging_steps: 10
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  fp16: false
+  bf16: true
+  dataloader_num_workers: 4
+
+inference:
+  temperature: 0.2
+  top_p: 0.95
+  max_new_tokens: 1024
+  do_sample: false  # greedy for structured output
+
+output_dir: "models/7a_intent_to_asm"
