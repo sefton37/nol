@@ -64,7 +64,7 @@ The current verifier. Checks that the program is well-formed. This is the founda
 
 **Does not guarantee:** The program matches the user's intent.
 
-### Layer 2: Contractual Verification (Seed exists — extend in Phase 6+)
+### Layer 2: Contractual Verification (Complete — Phase 6a)
 
 PRE/POST conditions, but dramatically richer. The contracts don't just check boundary conditions — they express the *relationship* between input and output that constitutes the program's meaning.
 
@@ -91,7 +91,7 @@ These three contracts together *are* the definition of absolute value. A program
 
 **Key design question:** How expressive can contracts be while remaining decidable for the verifier? The sweet spot is properties that can be checked mechanically (via static analysis or runtime assertion) without requiring a theorem prover.
 
-### Layer 3: Empirical Verification (New — Phase 6+)
+### Layer 3: Empirical Verification (Complete — Phase 6b/6c)
 
 Concrete input/output examples that the program must satisfy. These are the **witnesses** — evidence that the program does what it claims.
 
@@ -142,7 +142,7 @@ Extended format:
 }
 ```
 
-### Layer 4: Reflective Verification (New — Phase 7+)
+### Layer 4: Reflective Verification (Complete — Phase 7)
 
 The LLM generates a natural language description of what the program *actually does*, derived from reading the assembly — not from the original intent. The human sees both side by side:
 
@@ -178,40 +178,24 @@ These numbers are illustrative, not measured. The actual rates depend on contrac
 
 ## Impact on NoLang Roadmap
 
-### Current Phases (unchanged)
+### All Phases — Complete
 
-| Phase | Status | What |
-|-------|--------|------|
-| 1 | Complete | `common` crate — types, encoding, decode |
-| 2 | Complete | `vm` crate — execution engine |
-| 3 | Complete | `verifier` crate — static analysis |
-| 4 | Complete | `assembler` crate — text ↔ binary |
-| 5 | Complete | CLI + integration pipeline |
+| Phase | Status | What | Layer |
+|-------|--------|------|-------|
+| 1 | Complete | `common` crate — types, encoding, decode (47 opcodes) | — |
+| 2 | Complete | `vm` crate — execution engine | — |
+| 3 | Complete | `verifier` crate — static analysis | Layer 1 |
+| 4 | Complete | `assembler` crate — text ↔ binary | — |
+| 5 | Complete | CLI binary (`nolang`) + integration pipeline | — |
+| 6a | Complete | IMPLIES + FORALL opcodes for relational contracts | Layer 2 |
+| 6b | Complete | Witness format + runner (`nolang witness`) | Layer 3 |
+| 6c | Complete | 220 programs across 14 categories with contracts + witnesses | Layers 2 + 3 |
+| 7a | Complete | LoRA fine-tuning: intent → assembly | Layers 2 + 3 |
+| 7b | Complete | LoRA fine-tuning: assembly → description | Layer 4 |
+| 7c | Complete | Interactive comparison UI with human feedback | Layer 4 |
+| 8 | Complete | Feedback loop: collect failures → build dataset → retrain → measure | All layers |
 
-### Extended Phases (new)
-
-| Phase | What | Layer |
-|-------|------|-------|
-| 6 | Corpus expansion + rich contracts | Layers 2 + 3 |
-| 6a | Extend contract instruction set for relational properties | Layer 2 |
-| 6b | Add witness format to `.nolt` and build witness runner | Layer 3 |
-| 6c | Write 200+ programs with contracts AND witnesses | Layers 2 + 3 |
-| 7 | LLM integration — generation + description | Layers 2 + 4 |
-| 7a | Train/fine-tune on (intent → assembly + contracts + witnesses) | Layers 2 + 3 |
-| 7b | Train on (assembly → description) for reflective verification | Layer 4 |
-| 7c | Build the comparison UI (intent vs. description) | Layer 4 |
-| 8 | Feedback loop — failures as training signal | All layers |
-| 8a | Contract violations identify specific semantic mismatches | Layer 2 |
-| 8b | Witness failures provide concrete counterexamples | Layer 3 |
-| 8c | Human rejections at Layer 4 feed back to fine-tuning | Layer 4 |
-
-### What Changes in Phases 3-5
-
-Nothing structurally. But the awareness of Layers 2-4 should inform design choices:
-
-- **Phase 3 (verifier):** The contract checking system (PRE/POST validation) should be designed for extensibility. Future contract instructions will need to express richer properties than "result is BOOL."
-- **Phase 4 (assembler):** The assembly format should accommodate contract annotations cleanly. Consider how richer contracts will be expressed in `.nol` text.
-- **Phase 5 (CLI):** The `nolang run` command should support witness files as an input. `nolang verify` should support contract-level checks beyond structural validity.
+528 Rust tests passing. 1,338 training corpus entries. All 4 verification layers operational.
 
 ## Open Questions
 

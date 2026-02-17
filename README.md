@@ -37,7 +37,15 @@ Because the IR is canonical, verification is cheap. Because verification is chea
 
 ## Current State
 
-Foundation complete (Phases 1-5): common types, VM, verifier, assembler, and CLI/training pipeline. Next: semantic verification layers — contracts, witnesses, LLM integration, and feedback loops (Phases 6-8). See [BUILD_ORDER.md](docs/BUILD_ORDER.md) for the full sequenced plan.
+**All 8 phases complete.** The full stack is implemented:
+
+- **Phases 1-4** — Rust workspace: `common` types (47 opcodes), `vm` execution engine, `verifier` static analysis, `assembler` text ↔ binary translation. 528 tests passing.
+- **Phase 5** — CLI binary (`nolang`): assemble, verify, run, hash, witness, generate commands. Catalog of 14 program categories.
+- **Phase 6** — Semantic layers: rich contracts (IMPLIES/FORALL opcodes), witness runner, 220 generated programs with contracts and witnesses. Training corpus of 1,338 entries.
+- **Phase 7** — LLM integration: LoRA fine-tuning scripts for intent→assembly (7a) and assembly→description (7b), validation pipeline, evaluation metrics, interactive comparison UI.
+- **Phase 8** — Feedback loop: failure collection across 4 verification layers, error-aware dataset building, conservative retraining from Phase 7 checkpoints, improvement measurement.
+
+See [BUILD_ORDER.md](docs/BUILD_ORDER.md) for detailed acceptance criteria per phase.
 
 ## Documentation
 

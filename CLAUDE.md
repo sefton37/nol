@@ -28,26 +28,39 @@ nolang/
 │   ├── vm/                ← Stack-based virtual machine
 │   ├── verifier/          ← Static analysis and verification
 │   └── assembler/         ← Text assembly ↔ binary translation
+├── nolang-cli/            ← CLI binary: assemble, verify, run, hash, witness, generate
+│   └── src/
+│       ├── main.rs        ← CLI entry point (binary name: `nolang`)
+│       ├── lib.rs         ← Exposes json, witness, catalog, generate modules
+│       └── catalog/       ← 14 category modules for corpus generation
+├── nolang-ml/             ← LLM integration + feedback loop (Python)
+│   ├── configs/           ← LoRA configs (lora_7a.yaml, lora_7b.yaml, lora_8a.yaml)
+│   ├── scripts/           ← 12 Python scripts (train, inference, evaluate, feedback)
+│   ├── run_feedback_cycle.sh ← Phase 8 orchestration: collect → build → retrain → measure
+│   ├── data/splits/       ← Train/val/test JSONL splits
+│   ├── models/            ← Fine-tuned LoRA adapters
+│   └── outputs/           ← Generations, metrics, feedback
 └── tests/
-    ├── programs/          ← .nol assembly files for testing
-    └── corpus/            ← Verified (intent, binary) training pairs
+    ├── programs/          ← .nol assembly files (19 hand-written + 220 generated)
+    ├── witnesses/         ← Witness JSON files for Layer 3 verification
+    └── corpus/            ← Verified (intent, binary) training pairs (.nolt)
 ```
 
-## Build Order — DO NOT SKIP PHASES
+## Build Phases (ALL COMPLETE)
 
-Development follows strict phases. **Do not begin a phase until the previous phase passes all its acceptance tests.**
+All 8 phases are implemented and committed. 528 Rust tests passing.
 
-1. **common** — Opcode enum, TypeTag enum, Instruction struct, encode/decode
-2. **vm** — Execute instruction streams, stack management, pattern matching
-3. **verifier** — Static checks: types, exhaustion, hashes, contracts
+1. **common** — Opcode enum (47 opcodes), TypeTag enum, Instruction struct, encode/decode
+2. **vm** — Execute instruction streams, stack management, pattern matching, functions
+3. **verifier** — Static checks: types, exhaustion, hashes, contracts, stack balance
 4. **assembler** — Text ↔ binary bidirectional translation
-5. **training** — CLI + integration pipeline, generate and verify (intent, IR) pairs
-6. **semantic layers** — Rich contracts, witness format + runner, corpus of 200+ programs
-7. **LLM integration** — Intent → program generation, program → description, comparison UI
-8. **feedback loop** — Contract violations, witness failures, and human rejections as training signal
+5. **training** — CLI binary (`nolang`) + integration pipeline, corpus generation
+6. **semantic layers** — Rich contracts (IMPLIES/FORALL), witness runner, 220 programs across 14 categories
+7. **LLM integration** — LoRA fine-tuning (intent→assembly, assembly→description), comparison UI
+8. **feedback loop** — Failure collection, error-aware retraining, improvement measurement
 
-Read `docs/BUILD_ORDER.md` for detailed acceptance criteria per phase.
-See `docs/SEMANTIC_VERIFICATION.md` for the architectural rationale behind Phases 6-8.
+See `docs/BUILD_ORDER.md` for detailed acceptance criteria per phase.
+See `docs/SEMANTIC_VERIFICATION.md` for the layered verification architecture.
 
 ## Coding Conventions
 

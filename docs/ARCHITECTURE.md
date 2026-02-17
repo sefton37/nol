@@ -9,7 +9,7 @@
                     └──────────┬──────────┘
                                │
                     ┌──────────▼──────────┐
-                    │   LLM Generator     │  (Future: Phase 7)
+                    │   LLM Generator     │  (Phase 7: LoRA fine-tuned)
                     │  Intent → Binary IR │
                     └──────────┬──────────┘
                                │
@@ -21,8 +21,26 @@
         ┌────────▼──┐  ┌──────▼─────┐  ┌───▼──────────┐
         │ Assembler  │  │  Verifier  │  │     VM       │
         │ text ↔ bin │  │  static    │  │  execution   │
-        └────────────┘  │  analysis  │  └──────────────┘
-                        └────────────┘
+        └────────────┘  │  analysis  │  └───────┬──────┘
+                        └──────┬─────┘          │
+                               │         ┌──────▼──────┐
+                    ┌──────────▼──┐      │  Witness    │
+                    │  Contracts  │      │  Runner     │
+                    │  PRE/POST   │      │  Layer 3    │
+                    │  Layer 2    │      └──────┬──────┘
+                    └─────────────┘             │
+                                        ┌──────▼──────┐
+                                        │  Reflective │
+                                        │  Layer 4    │
+                                        │  asm→desc   │
+                                        └──────┬──────┘
+                                               │
+                                        ┌──────▼──────┐
+                                        │  Feedback   │  (Phase 8)
+                                        │  Loop       │
+                                        │  failures → │
+                                        │  retraining │
+                                        └─────────────┘
 ```
 
 **Data flow for execution:**
@@ -291,6 +309,26 @@ Extended format (Phase 6+) adds contracts and witnesses:
 
 One pair per line. `binary_b64` is base64-encoded binary.
 
-## Extended Architecture (Phases 6-8)
+## Extended Architecture (Phases 6-8) — Complete
 
-This document covers the mechanical foundation (Phases 1-5). For the semantic verification layers that build on top — rich contracts, witnesses, LLM integration, and feedback loops — see `SEMANTIC_VERIFICATION.md` for the architecture and `BUILD_ORDER.md` for the implementation timeline.
+Phases 6-8 are implemented. See `SEMANTIC_VERIFICATION.md` for the full layered verification architecture.
+
+**Phase 6 (Semantic Layers):**
+- Rich contracts via IMPLIES (0x36) and FORALL (0x73) opcodes in `common`, enforced in `vm`, validated in `verifier`
+- Witness runner: `nolang witness input.nolb witnesses.json` — executes program against concrete I/O pairs
+- 220 generated programs across 14 categories in `nolang-cli/src/catalog/`, each with contracts and witnesses
+- Training corpus: 1,338 entries in `tests/corpus/` (`.nolt` format with intent, assembly, binary, witnesses)
+
+**Phase 7 (LLM Integration):**
+- Python project in `nolang-ml/` — separate from Rust workspace
+- LoRA fine-tuning: `train_7a.py` (intent→assembly), `train_7b.py` (assembly→description)
+- Validation pipeline: `validate.py` calls Rust CLI (assemble → hash → verify → witness)
+- Evaluation: `evaluate.py` measures syntax validity, verification pass rate, witness pass rate, BLEU/ROUGE
+- Interactive comparison UI: `compare.py` collects human feedback to `outputs/human_feedback.jsonl`
+
+**Phase 8 (Feedback Loop):**
+- `collect_failures.py` — harvests failures from eval + human feedback, classifies into 4 layers
+- `build_feedback_dataset.py` — pairs failures with corpus reference assemblies, creates error-aware SFT entries
+- `retrain.py` — retrains from Phase 7 adapter with augmented data (conservative LR, 1 epoch)
+- `measure_improvement.py` — before/after metrics comparison, regression check
+- `run_feedback_cycle.sh` — orchestrates iterative feedback cycles
