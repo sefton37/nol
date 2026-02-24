@@ -34,13 +34,17 @@ use parser::{parse_line, ParseResult};
 /// Assemble text into a binary program.
 ///
 /// Returns the first error encountered. Fix one error at a time.
+///
+/// String literals in `STR_CONST` instructions are collected into the program's
+/// string pool in order of first appearance (deduped).
 pub fn assemble(text: &str) -> Result<Program, AsmError> {
     let mut instructions = Vec::new();
+    let mut string_pool: Vec<String> = Vec::new();
 
     for (idx, line) in text.lines().enumerate() {
         let line_num = idx + 1;
         let tokens = tokenize_line(line, line_num)?;
-        if let Some(result) = parse_line(&tokens, line_num)? {
+        if let Some(result) = parse_line(&tokens, line_num, &mut string_pool)? {
             match result {
                 ParseResult::Single(instr) => instructions.push(instr),
                 ParseResult::Double(a, b) => {
@@ -51,7 +55,11 @@ pub fn assemble(text: &str) -> Result<Program, AsmError> {
         }
     }
 
-    Ok(Program::new(instructions))
+    if string_pool.is_empty() {
+        Ok(Program::new(instructions))
+    } else {
+        Ok(Program::with_string_pool(instructions, string_pool))
+    }
 }
 
 /// Disassemble a binary program into canonical assembly text.
@@ -210,6 +218,24 @@ HALT
             "EXHAUST",
             "NOP",
             "HALT",
+            // New I/O opcodes
+            "FILE_READ",
+            "FILE_WRITE",
+            "FILE_APPEND",
+            "FILE_EXISTS",
+            "FILE_DELETE",
+            "DIR_LIST",
+            "DIR_MAKE",
+            "PATH_JOIN",
+            "PATH_PARENT",
+            "STR_LEN",
+            "STR_CONCAT",
+            "STR_SLICE",
+            "STR_SPLIT",
+            "STR_BYTES",
+            "BYTES_STR",
+            "EXEC_SPAWN",
+            "EXEC_CHECK",
         ];
         for mnemonic in &opcodes {
             let text = format!("{mnemonic}\n");
@@ -235,6 +261,11 @@ HALT
             "MAYBE",
             "RESULT",
             "UNIT",
+            // New type tags
+            "STRING",
+            "BYTES",
+            "PATH",
+            "HANDLE",
         ];
         for tag in &tags {
             let text = format!("PARAM {tag}\n");
@@ -242,5 +273,105 @@ HALT
             let disasm = disassemble(&program);
             assert_eq!(disasm, text, "roundtrip failed for PARAM {tag}");
         }
+    }
+
+    // STR_CONST assembler-level tests
+
+    #[test]
+    fn assemble_str_const_literal_builds_pool() {
+        let text = "STR_CONST \"hello\"\nHALT\n";
+        let program = assemble(text).unwrap();
+        assert_eq!(program.instructions.len(), 2);
+        assert_eq!(program.instructions[0].opcode, Opcode::StrConst);
+        assert_eq!(program.instructions[0].arg1, 0);
+        assert_eq!(program.string_pool, vec!["hello".to_string()]);
+    }
+
+    #[test]
+    fn assemble_str_const_dedup() {
+        let text = "STR_CONST \"hi\"\nSTR_CONST \"hi\"\nHALT\n";
+        let program = assemble(text).unwrap();
+        assert_eq!(program.string_pool.len(), 1);
+        assert_eq!(program.instructions[0].arg1, 0);
+        assert_eq!(program.instructions[1].arg1, 0);
+    }
+
+    #[test]
+    fn assemble_str_const_multiple_unique() {
+        let text = "STR_CONST \"alpha\"\nSTR_CONST \"beta\"\nHALT\n";
+        let program = assemble(text).unwrap();
+        assert_eq!(program.string_pool.len(), 2);
+        assert_eq!(program.instructions[0].arg1, 0);
+        assert_eq!(program.instructions[1].arg1, 1);
+    }
+
+    #[test]
+    fn assemble_str_const_numeric_index_no_pool() {
+        // When using a numeric index directly, pool stays empty
+        let text = "STR_CONST 0\nHALT\n";
+        let program = assemble(text).unwrap();
+        assert!(program.string_pool.is_empty());
+        assert_eq!(program.instructions[0].arg1, 0);
+    }
+
+    #[test]
+    fn disassemble_str_const_with_pool() {
+        let program = Program::with_string_pool(
+            vec![
+                Instruction::new(Opcode::StrConst, TypeTag::None, 0, 0, 0),
+                Instruction::new(Opcode::Halt, TypeTag::None, 0, 0, 0),
+            ],
+            vec!["hello".to_string()],
+        );
+        let text = disassemble(&program);
+        assert_eq!(text, "STR_CONST \"hello\"\nHALT\n");
+    }
+
+    #[test]
+    fn disassemble_str_const_without_pool_uses_index() {
+        // If no pool, fall back to numeric index
+        let program = Program::new(vec![
+            Instruction::new(Opcode::StrConst, TypeTag::None, 3, 0, 0),
+            Instruction::new(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ]);
+        let text = disassemble(&program);
+        assert_eq!(text, "STR_CONST 3\nHALT\n");
+    }
+
+    #[test]
+    fn str_const_roundtrip_with_literal() {
+        let original_text = "STR_CONST \"hello world\"\nHALT\n";
+        let program = assemble(original_text).unwrap();
+        let disassembled = disassemble(&program);
+        assert_eq!(disassembled, original_text);
+    }
+
+    #[test]
+    fn str_const_roundtrip_with_special_chars() {
+        // String containing a backslash and quote — canonical form uses escapes
+        let original_text = "STR_CONST \"say \\\"hi\\\"\"\nHALT\n";
+        let program = assemble(original_text).unwrap();
+        assert_eq!(program.string_pool[0], "say \"hi\"");
+        let disassembled = disassemble(&program);
+        assert_eq!(disassembled, original_text);
+    }
+
+    /// Phase 1 gate: assemble → encode binary → decode → disassemble → reassemble → encode = identical bytes.
+    #[test]
+    fn string_pool_binary_roundtrip() {
+        let text = "STR_CONST \"hello\"\nSTR_CONST \"world\"\nSTR_CONCAT\nHALT\n";
+        let program1 = assemble(text).unwrap();
+        let bytes1 = program1.encode();
+
+        // Decode the binary back
+        let decoded = Program::decode(&bytes1).unwrap();
+        assert_eq!(decoded.string_pool, vec!["hello", "world"]);
+
+        // Disassemble and reassemble
+        let disassembled = disassemble(&decoded);
+        let program2 = assemble(&disassembled).unwrap();
+        let bytes2 = program2.encode();
+
+        assert_eq!(bytes1, bytes2, "binary roundtrip must be identical");
     }
 }

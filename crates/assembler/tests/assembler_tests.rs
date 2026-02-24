@@ -504,12 +504,13 @@ fn error_unexpected_token_extra_arg() {
 
 #[test]
 fn error_unknown_type_tag() {
-    let err = assemble("PARAM STRING\n").unwrap_err();
+    // STRING is now a valid type tag (0x0D); use a name that is still unknown.
+    let err = assemble("PARAM BOGUS_TYPE\n").unwrap_err();
     assert_eq!(
         err,
         AsmError::UnknownTypeTag {
             line: 1,
-            token: "STRING".to_string()
+            token: "BOGUS_TYPE".to_string()
         }
     );
 }

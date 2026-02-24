@@ -28,6 +28,10 @@ pub enum AsmError {
     /// A token appeared where it was not expected.
     #[error("line {line}: unexpected token '{token}'")]
     UnexpectedToken { line: usize, token: String },
+
+    /// A string literal was not properly terminated.
+    #[error("line {line}: unterminated string literal")]
+    InvalidString { line: usize },
 }
 
 #[cfg(test)]

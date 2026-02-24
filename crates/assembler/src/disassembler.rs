@@ -12,6 +12,7 @@ use nolang_common::{Opcode, Program, TypeTag};
 /// (`assemble(disassemble(program)) == program`).
 pub fn disassemble(program: &Program) -> String {
     let instrs = &program.instructions;
+    let pool = &program.string_pool;
     let mut lines = Vec::new();
     let mut i = 0;
 
@@ -48,7 +49,49 @@ pub fn disassemble(program: &Program) -> String {
             | Opcode::EndFunc
             | Opcode::Exhaust
             | Opcode::Nop
-            | Opcode::Halt => instr.opcode.mnemonic().to_string(),
+            | Opcode::Halt
+            // I/O opcodes: all no-arg (operate on the stack)
+            | Opcode::FileRead
+            | Opcode::FileWrite
+            | Opcode::FileAppend
+            | Opcode::FileExists
+            | Opcode::FileDelete
+            | Opcode::DirList
+            | Opcode::DirMake
+            | Opcode::PathJoin
+            | Opcode::PathParent
+            | Opcode::StrLen
+            | Opcode::StrConcat
+            | Opcode::StrSlice
+            | Opcode::StrSplit
+            | Opcode::StrBytes
+            | Opcode::BytesStr
+            | Opcode::ExecSpawn
+            | Opcode::ExecCheck => instr.opcode.mnemonic().to_string(),
+
+            // Pattern S: STR_CONST — emit string literal from pool
+            Opcode::StrConst => {
+                let idx = instr.arg1 as usize;
+                if idx < pool.len() {
+                    let s = &pool[idx];
+                    // Escape the string for assembly output
+                    let mut escaped = String::with_capacity(s.len() + 2);
+                    for c in s.chars() {
+                        match c {
+                            '"' => escaped.push_str("\\\""),
+                            '\\' => escaped.push_str("\\\\"),
+                            '\n' => escaped.push_str("\\n"),
+                            '\t' => escaped.push_str("\\t"),
+                            '\r' => escaped.push_str("\\r"),
+                            c => escaped.push(c),
+                        }
+                    }
+                    format!("{} \"{}\"", instr.opcode.mnemonic(), escaped)
+                } else {
+                    // Pool index out of bounds: emit raw index as fallback
+                    format!("{} {}", instr.opcode.mnemonic(), instr.arg1)
+                }
+            }
 
             // Pattern B/D: Single decimal arg
             Opcode::Ref

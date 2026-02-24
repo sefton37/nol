@@ -9,38 +9,100 @@ pub(crate) enum Token {
     Ident(String),
     /// A numeric literal (decimal or hex).
     Number(u64),
+    /// A string literal (contents without surrounding quotes, escapes resolved).
+    StringLit(String),
 }
 
 /// Tokenize a single line of assembly text.
 ///
 /// Returns an empty Vec for blank lines and comment-only lines.
 /// Comments start with `;` and extend to end of line.
+/// String literals are delimited by `"` and support `\"` and `\\` escapes.
 pub(crate) fn tokenize_line(line: &str, line_num: usize) -> Result<Vec<Token>, AsmError> {
-    // Strip comment
-    let line = match line.find(';') {
-        Some(pos) => &line[..pos],
-        None => line,
-    };
-
     let mut tokens = Vec::new();
-    for word in line.split_whitespace() {
-        let token = if word.starts_with("0x") || word.starts_with("0X") {
+    let chars: Vec<char> = line.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+
+        // Skip whitespace
+        if ch.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+
+        // Comment — discard rest of line
+        if ch == ';' {
+            break;
+        }
+
+        // String literal
+        if ch == '"' {
+            i += 1; // skip opening quote
+            let mut s = String::new();
+            let mut closed = false;
+            while i < len {
+                let c = chars[i];
+                if c == '\\' && i + 1 < len {
+                    let escaped = chars[i + 1];
+                    match escaped {
+                        '"' => s.push('"'),
+                        '\\' => s.push('\\'),
+                        'n' => s.push('\n'),
+                        't' => s.push('\t'),
+                        'r' => s.push('\r'),
+                        other => {
+                            s.push('\\');
+                            s.push(other);
+                        }
+                    }
+                    i += 2;
+                } else if c == '"' {
+                    closed = true;
+                    i += 1;
+                    break;
+                } else {
+                    s.push(c);
+                    i += 1;
+                }
+            }
+            if !closed {
+                return Err(AsmError::InvalidString { line: line_num });
+            }
+            tokens.push(Token::StringLit(s));
+            continue;
+        }
+
+        // Collect a word (runs until whitespace, `;`, or `"`)
+        let start = i;
+        while i < len {
+            let c = chars[i];
+            if c.is_ascii_whitespace() || c == ';' || c == '"' {
+                break;
+            }
+            i += 1;
+        }
+        let word: String = chars[start..i].iter().collect();
+
+        let tok = if word.starts_with("0x") || word.starts_with("0X") {
             let hex_str = &word[2..];
             let value = u64::from_str_radix(hex_str, 16).map_err(|_| AsmError::InvalidNumber {
                 line: line_num,
-                token: word.to_string(),
+                token: word.clone(),
             })?;
             Token::Number(value)
         } else if word.as_bytes().first().is_some_and(|b| b.is_ascii_digit()) {
             let value: u64 = word.parse().map_err(|_| AsmError::InvalidNumber {
                 line: line_num,
-                token: word.to_string(),
+                token: word.clone(),
             })?;
             Token::Number(value)
         } else {
             Token::Ident(word.to_uppercase())
         };
-        tokens.push(token);
+        tokens.push(tok);
     }
 
     Ok(tokens)
@@ -163,6 +225,71 @@ mod tests {
                 Token::Ident("CONST_EXT".to_string()),
                 Token::Ident("I64".to_string()),
                 Token::Number(0x0000123456789abc),
+            ]
+        );
+    }
+
+    #[test]
+    fn string_literal_simple() {
+        assert_eq!(
+            tokenize_line(r#"STR_CONST "hello""#, 1).unwrap(),
+            vec![
+                Token::Ident("STR_CONST".to_string()),
+                Token::StringLit("hello".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn string_literal_with_escaped_quote() {
+        // Input: STR_CONST "say \"hi\""
+        let line = "STR_CONST \"say \\\"hi\\\"\"";
+        assert_eq!(
+            tokenize_line(line, 1).unwrap(),
+            vec![
+                Token::Ident("STR_CONST".to_string()),
+                Token::StringLit("say \"hi\"".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn string_literal_with_escaped_backslash() {
+        // Input: STR_CONST "a\\b"
+        let line = "STR_CONST \"a\\\\b\"";
+        assert_eq!(
+            tokenize_line(line, 1).unwrap(),
+            vec![
+                Token::Ident("STR_CONST".to_string()),
+                Token::StringLit("a\\b".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn string_literal_empty() {
+        assert_eq!(
+            tokenize_line("STR_CONST \"\"", 1).unwrap(),
+            vec![
+                Token::Ident("STR_CONST".to_string()),
+                Token::StringLit(String::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn unterminated_string_literal() {
+        let err = tokenize_line("STR_CONST \"hello", 7).unwrap_err();
+        assert_eq!(err, AsmError::InvalidString { line: 7 });
+    }
+
+    #[test]
+    fn string_literal_with_comment_after() {
+        assert_eq!(
+            tokenize_line("STR_CONST \"hi\" ; comment", 1).unwrap(),
+            vec![
+                Token::Ident("STR_CONST".to_string()),
+                Token::StringLit("hi".to_string()),
             ]
         );
     }

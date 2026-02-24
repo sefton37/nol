@@ -31,9 +31,14 @@ fn lookup_type_tag(name: &str) -> Option<TypeTag> {
 /// Parse a sequence of tokens from a single line into an instruction (or two).
 ///
 /// Returns `Ok(None)` for blank lines (empty token list).
+///
+/// `string_pool` is mutated when a `STR_CONST "..."` literal is encountered:
+/// the string is appended (deduped by first-appearance order) and the index
+/// is embedded in `arg1`.
 pub(crate) fn parse_line(
     tokens: &[Token],
     line_num: usize,
+    string_pool: &mut Vec<String>,
 ) -> Result<Option<ParseResult>, AsmError> {
     if tokens.is_empty() {
         return Ok(None);
@@ -47,6 +52,12 @@ pub(crate) fn parse_line(
                 token: n.to_string(),
             })
         }
+        Token::StringLit(_) => {
+            return Err(AsmError::UnexpectedToken {
+                line: line_num,
+                token: "\"...\"".to_string(),
+            })
+        }
     };
 
     let opcode = lookup_opcode(mnemonic).ok_or_else(|| AsmError::UnknownOpcode {
@@ -57,7 +68,7 @@ pub(crate) fn parse_line(
     let args = &tokens[1..];
 
     match opcode {
-        // Pattern A: No arguments (28 opcodes)
+        // Pattern A: No arguments (original 29 + 17 new I/O opcodes)
         Opcode::Bind
         | Opcode::Drop
         | Opcode::Neg
@@ -86,7 +97,24 @@ pub(crate) fn parse_line(
         | Opcode::EndFunc
         | Opcode::Exhaust
         | Opcode::Nop
-        | Opcode::Halt => {
+        | Opcode::Halt
+        | Opcode::FileRead
+        | Opcode::FileWrite
+        | Opcode::FileAppend
+        | Opcode::FileExists
+        | Opcode::FileDelete
+        | Opcode::DirList
+        | Opcode::DirMake
+        | Opcode::PathJoin
+        | Opcode::PathParent
+        | Opcode::StrLen
+        | Opcode::StrConcat
+        | Opcode::StrSlice
+        | Opcode::StrSplit
+        | Opcode::StrBytes
+        | Opcode::BytesStr
+        | Opcode::ExecSpawn
+        | Opcode::ExecCheck => {
             expect_end(args, line_num)?;
             Ok(Some(ParseResult::Single(Instruction::new(
                 opcode,
@@ -97,7 +125,7 @@ pub(crate) fn parse_line(
             ))))
         }
 
-        // Pattern B/D: Single decimal arg → arg1 (7 opcodes)
+        // Pattern B/D: Single decimal arg → arg1 (8 opcodes)
         Opcode::Ref
         | Opcode::Match
         | Opcode::Call
@@ -176,7 +204,8 @@ pub(crate) fn parse_line(
             let low16 = (full_value & 0xFFFF) as u16;
 
             let ext_instr = Instruction::new(Opcode::ConstExt, tt, high16, 0, 0);
-            let data_instr = Instruction::new(Opcode::Nop, TypeTag::None, mid_high, mid_low, low16);
+            let data_instr =
+                Instruction::new(Opcode::Nop, TypeTag::None, mid_high, mid_low, low16);
 
             Ok(Some(ParseResult::Double(ext_instr, data_instr)))
         }
@@ -216,6 +245,56 @@ pub(crate) fn parse_line(
                 opcode, tt, arg1, 0, 0,
             ))))
         }
+
+        // Pattern L: STR_CONST — string literal or numeric pool index
+        Opcode::StrConst => {
+            match args.first() {
+                Some(Token::StringLit(s)) => {
+                    // Dedup: use existing index if string is already in pool
+                    let idx = if let Some(pos) = string_pool.iter().position(|x| x == s) {
+                        pos
+                    } else {
+                        let pos = string_pool.len();
+                        string_pool.push(s.clone());
+                        pos
+                    };
+                    if idx > u16::MAX as usize {
+                        return Err(AsmError::InvalidNumber {
+                            line: line_num,
+                            token: format!("{idx}"),
+                        });
+                    }
+                    expect_end(&args[1..], line_num)?;
+                    Ok(Some(ParseResult::Single(Instruction::new(
+                        opcode,
+                        TypeTag::None,
+                        idx as u16,
+                        0,
+                        0,
+                    ))))
+                }
+                Some(Token::Number(_)) => {
+                    let arg1 = expect_u16(args, 0, line_num, opcode.mnemonic(), 1)?;
+                    expect_end(&args[1..], line_num)?;
+                    Ok(Some(ParseResult::Single(Instruction::new(
+                        opcode,
+                        TypeTag::None,
+                        arg1,
+                        0,
+                        0,
+                    ))))
+                }
+                Some(Token::Ident(s)) => Err(AsmError::UnexpectedToken {
+                    line: line_num,
+                    token: s.clone(),
+                }),
+                None => Err(AsmError::MissingArgument {
+                    line: line_num,
+                    opcode: opcode.mnemonic(),
+                    expected: 1,
+                }),
+            }
+        }
     }
 }
 
@@ -232,6 +311,10 @@ fn expect_number(
         Some(Token::Ident(s)) => Err(AsmError::UnexpectedToken {
             line,
             token: s.clone(),
+        }),
+        Some(Token::StringLit(_)) => Err(AsmError::UnexpectedToken {
+            line,
+            token: "\"...\"".to_string(),
         }),
         None => Err(AsmError::MissingArgument {
             line,
@@ -276,6 +359,10 @@ fn expect_type_tag(
             line,
             token: n.to_string(),
         }),
+        Some(Token::StringLit(_)) => Err(AsmError::UnexpectedToken {
+            line,
+            token: "\"...\"".to_string(),
+        }),
         None => Err(AsmError::MissingArgument {
             line,
             opcode,
@@ -287,11 +374,15 @@ fn expect_type_tag(
 /// Check that there are no extra tokens.
 fn expect_end(remaining: &[Token], line: usize) -> Result<(), AsmError> {
     if let Some(tok) = remaining.first() {
-        let token = match tok {
+        let token_str = match tok {
             Token::Ident(s) => s.clone(),
             Token::Number(n) => n.to_string(),
+            Token::StringLit(_) => "\"...\"".to_string(),
         };
-        return Err(AsmError::UnexpectedToken { line, token });
+        return Err(AsmError::UnexpectedToken {
+            line,
+            token: token_str,
+        });
     }
     Ok(())
 }
@@ -308,14 +399,30 @@ mod tests {
         Token::Number(n)
     }
 
+    fn strlit(s: &str) -> Token {
+        Token::StringLit(s.to_string())
+    }
+
+    fn parse(tokens: &[Token]) -> Result<Option<ParseResult>, AsmError> {
+        let mut pool = Vec::new();
+        parse_line(tokens, 1, &mut pool)
+    }
+
+    fn parse_with_pool(
+        tokens: &[Token],
+        pool: &mut Vec<String>,
+    ) -> Result<Option<ParseResult>, AsmError> {
+        parse_line(tokens, 1, pool)
+    }
+
     #[test]
     fn parse_empty_tokens() {
-        assert!(parse_line(&[], 1).unwrap().is_none());
+        assert!(parse(&[]).unwrap().is_none());
     }
 
     #[test]
     fn parse_pattern_a_add() {
-        let result = parse_line(&[ident("ADD")], 1).unwrap().unwrap();
+        let result = parse(&[ident("ADD")]).unwrap().unwrap();
         match result {
             ParseResult::Single(i) => {
                 assert_eq!(i.opcode, Opcode::Add);
@@ -328,13 +435,13 @@ mod tests {
 
     #[test]
     fn parse_pattern_a_rejects_extra_args() {
-        let err = parse_line(&[ident("ADD"), num(5)], 1).unwrap_err();
+        let err = parse(&[ident("ADD"), num(5)]).unwrap_err();
         assert!(matches!(err, AsmError::UnexpectedToken { .. }));
     }
 
     #[test]
     fn parse_pattern_b_ref() {
-        let result = parse_line(&[ident("REF"), num(3)], 1).unwrap().unwrap();
+        let result = parse(&[ident("REF"), num(3)]).unwrap().unwrap();
         match result {
             ParseResult::Single(i) => {
                 assert_eq!(i.opcode, Opcode::Ref);
@@ -346,7 +453,7 @@ mod tests {
 
     #[test]
     fn parse_pattern_b_missing_arg() {
-        let err = parse_line(&[ident("REF")], 1).unwrap_err();
+        let err = parse(&[ident("REF")]).unwrap_err();
         assert!(matches!(
             err,
             AsmError::MissingArgument {
@@ -359,9 +466,7 @@ mod tests {
 
     #[test]
     fn parse_pattern_c_func() {
-        let result = parse_line(&[ident("FUNC"), num(1), num(8)], 1)
-            .unwrap()
-            .unwrap();
+        let result = parse(&[ident("FUNC"), num(1), num(8)]).unwrap().unwrap();
         match result {
             ParseResult::Single(i) => {
                 assert_eq!(i.opcode, Opcode::Func);
@@ -374,9 +479,7 @@ mod tests {
 
     #[test]
     fn parse_pattern_e_param() {
-        let result = parse_line(&[ident("PARAM"), ident("I64")], 1)
-            .unwrap()
-            .unwrap();
+        let result = parse(&[ident("PARAM"), ident("I64")]).unwrap().unwrap();
         match result {
             ParseResult::Single(i) => {
                 assert_eq!(i.opcode, Opcode::Param);
@@ -388,9 +491,7 @@ mod tests {
 
     #[test]
     fn parse_pattern_f_typeof() {
-        let result = parse_line(&[ident("TYPEOF"), ident("I64")], 1)
-            .unwrap()
-            .unwrap();
+        let result = parse(&[ident("TYPEOF"), ident("I64")]).unwrap().unwrap();
         match result {
             ParseResult::Single(i) => {
                 assert_eq!(i.opcode, Opcode::Typeof);
@@ -403,7 +504,7 @@ mod tests {
 
     #[test]
     fn parse_pattern_g_const() {
-        let result = parse_line(&[ident("CONST"), ident("I64"), num(0), num(42)], 1)
+        let result = parse(&[ident("CONST"), ident("I64"), num(0), num(42)])
             .unwrap()
             .unwrap();
         match result {
@@ -419,12 +520,9 @@ mod tests {
 
     #[test]
     fn parse_pattern_h_const_ext() {
-        let result = parse_line(
-            &[ident("CONST_EXT"), ident("I64"), num(0x0000123456789abc)],
-            1,
-        )
-        .unwrap()
-        .unwrap();
+        let result = parse(&[ident("CONST_EXT"), ident("I64"), num(0x0000123456789abc)])
+            .unwrap()
+            .unwrap();
         match result {
             ParseResult::Double(ext, data) => {
                 assert_eq!(ext.opcode, Opcode::ConstExt);
@@ -441,7 +539,7 @@ mod tests {
 
     #[test]
     fn parse_pattern_i_hash() {
-        let result = parse_line(&[ident("HASH"), num(0xa3f2), num(0x1b4c), num(0x7d9e)], 1)
+        let result = parse(&[ident("HASH"), num(0xa3f2), num(0x1b4c), num(0x7d9e)])
             .unwrap()
             .unwrap();
         match result {
@@ -457,9 +555,10 @@ mod tests {
 
     #[test]
     fn parse_pattern_j_variant_new() {
-        let result = parse_line(&[ident("VARIANT_NEW"), ident("VARIANT"), num(2), num(0)], 1)
-            .unwrap()
-            .unwrap();
+        let result =
+            parse(&[ident("VARIANT_NEW"), ident("VARIANT"), num(2), num(0)])
+                .unwrap()
+                .unwrap();
         match result {
             ParseResult::Single(i) => {
                 assert_eq!(i.opcode, Opcode::VariantNew);
@@ -473,7 +572,7 @@ mod tests {
 
     #[test]
     fn parse_pattern_k_tuple_new() {
-        let result = parse_line(&[ident("TUPLE_NEW"), ident("TUPLE"), num(2)], 1)
+        let result = parse(&[ident("TUPLE_NEW"), ident("TUPLE"), num(2)])
             .unwrap()
             .unwrap();
         match result {
@@ -488,11 +587,11 @@ mod tests {
 
     #[test]
     fn unknown_opcode() {
-        let err = parse_line(&[ident("FOOBAR")], 3).unwrap_err();
+        let err = parse(&[ident("FOOBAR")]).unwrap_err();
         assert_eq!(
             err,
             AsmError::UnknownOpcode {
-                line: 3,
+                line: 1,
                 token: "FOOBAR".to_string()
             }
         );
@@ -500,23 +599,17 @@ mod tests {
 
     #[test]
     fn unknown_type_tag() {
-        let err = parse_line(&[ident("PARAM"), ident("STRING")], 5).unwrap_err();
-        assert_eq!(
-            err,
-            AsmError::UnknownTypeTag {
-                line: 5,
-                token: "STRING".to_string()
-            }
-        );
+        let err = parse(&[ident("PARAM"), ident("STRING_TAG_UNKNOWN")]).unwrap_err();
+        assert!(matches!(err, AsmError::UnknownTypeTag { .. }));
     }
 
     #[test]
     fn number_too_large_for_u16() {
-        let err = parse_line(&[ident("REF"), num(70000)], 2).unwrap_err();
+        let err = parse(&[ident("REF"), num(70000)]).unwrap_err();
         assert_eq!(
             err,
             AsmError::InvalidNumber {
-                line: 2,
+                line: 1,
                 token: "70000".to_string()
             }
         );
@@ -524,7 +617,195 @@ mod tests {
 
     #[test]
     fn number_as_first_token() {
-        let err = parse_line(&[num(42)], 1).unwrap_err();
+        let err = parse(&[num(42)]).unwrap_err();
+        assert!(matches!(err, AsmError::UnexpectedToken { .. }));
+    }
+
+    // I/O opcode tests
+
+    #[test]
+    fn parse_file_read() {
+        let result = parse(&[ident("FILE_READ")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::FileRead),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_file_write() {
+        let result = parse(&[ident("FILE_WRITE")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::FileWrite),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_file_append() {
+        let result = parse(&[ident("FILE_APPEND")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::FileAppend),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_file_exists() {
+        let result = parse(&[ident("FILE_EXISTS")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::FileExists),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_dir_list() {
+        let result = parse(&[ident("DIR_LIST")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::DirList),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_str_len() {
+        let result = parse(&[ident("STR_LEN")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::StrLen),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_str_concat() {
+        let result = parse(&[ident("STR_CONCAT")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::StrConcat),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_exec_spawn() {
+        let result = parse(&[ident("EXEC_SPAWN")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::ExecSpawn),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_exec_check() {
+        let result = parse(&[ident("EXEC_CHECK")]).unwrap().unwrap();
+        match result {
+            ParseResult::Single(i) => assert_eq!(i.opcode, Opcode::ExecCheck),
+            _ => panic!("expected Single"),
+        }
+    }
+
+    #[test]
+    fn parse_io_opcode_rejects_extra_args() {
+        let err = parse(&[ident("FILE_READ"), num(0)]).unwrap_err();
+        assert!(matches!(err, AsmError::UnexpectedToken { .. }));
+    }
+
+    // STR_CONST tests
+
+    #[test]
+    fn parse_str_const_with_string_literal() {
+        let mut pool = Vec::new();
+        let result = parse_with_pool(&[ident("STR_CONST"), strlit("hello")], &mut pool)
+            .unwrap()
+            .unwrap();
+        match result {
+            ParseResult::Single(i) => {
+                assert_eq!(i.opcode, Opcode::StrConst);
+                assert_eq!(i.type_tag, TypeTag::None);
+                assert_eq!(i.arg1, 0);
+                assert_eq!(i.arg2, 0);
+                assert_eq!(i.arg3, 0);
+            }
+            _ => panic!("expected Single"),
+        }
+        assert_eq!(pool, vec!["hello".to_string()]);
+    }
+
+    #[test]
+    fn parse_str_const_with_numeric_index() {
+        let mut pool = Vec::new();
+        let result = parse_with_pool(&[ident("STR_CONST"), num(5)], &mut pool)
+            .unwrap()
+            .unwrap();
+        match result {
+            ParseResult::Single(i) => {
+                assert_eq!(i.opcode, Opcode::StrConst);
+                assert_eq!(i.arg1, 5);
+            }
+            _ => panic!("expected Single"),
+        }
+        // Pool is not modified when a numeric index is given
+        assert!(pool.is_empty());
+    }
+
+    #[test]
+    fn parse_str_const_deduplication() {
+        let mut pool = Vec::new();
+        // Add "hello" twice — should get same index both times
+        let r1 = parse_with_pool(&[ident("STR_CONST"), strlit("hello")], &mut pool)
+            .unwrap()
+            .unwrap();
+        let r2 = parse_with_pool(&[ident("STR_CONST"), strlit("hello")], &mut pool)
+            .unwrap()
+            .unwrap();
+        match (r1, r2) {
+            (ParseResult::Single(i1), ParseResult::Single(i2)) => {
+                assert_eq!(i1.arg1, 0);
+                assert_eq!(i2.arg1, 0);
+            }
+            _ => panic!("expected Singles"),
+        }
+        assert_eq!(pool.len(), 1);
+        assert_eq!(pool[0], "hello");
+    }
+
+    #[test]
+    fn parse_str_const_multiple_strings() {
+        let mut pool = Vec::new();
+        let r1 = parse_with_pool(&[ident("STR_CONST"), strlit("alpha")], &mut pool)
+            .unwrap()
+            .unwrap();
+        let r2 = parse_with_pool(&[ident("STR_CONST"), strlit("beta")], &mut pool)
+            .unwrap()
+            .unwrap();
+        match (r1, r2) {
+            (ParseResult::Single(i1), ParseResult::Single(i2)) => {
+                assert_eq!(i1.arg1, 0);
+                assert_eq!(i2.arg1, 1);
+            }
+            _ => panic!("expected Singles"),
+        }
+        assert_eq!(pool, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn parse_str_const_missing_arg() {
+        let mut pool = Vec::new();
+        let err = parse_with_pool(&[ident("STR_CONST")], &mut pool).unwrap_err();
+        assert!(matches!(
+            err,
+            AsmError::MissingArgument {
+                opcode: "STR_CONST",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn parse_str_const_ident_arg_rejected() {
+        let mut pool = Vec::new();
+        let err =
+            parse_with_pool(&[ident("STR_CONST"), ident("SOMETHING")], &mut pool).unwrap_err();
         assert!(matches!(err, AsmError::UnexpectedToken { .. }));
     }
 }
