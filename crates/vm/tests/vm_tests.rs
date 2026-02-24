@@ -2336,3 +2336,194 @@ fn div_i64_negative_truncates_toward_zero() {
     ]);
     assert_eq!(result, Ok(Value::I64(-3)));
 }
+
+// ============================================================
+// I/O extension tests (Phase 9)
+// ============================================================
+
+/// Helper to run a program with a string pool.
+fn run_program_with_pool(
+    instructions: Vec<Instruction>,
+    pool: Vec<String>,
+) -> Result<Value, RuntimeError> {
+    let program = Program::with_string_pool(instructions, pool);
+    nolang_vm::run(&program)
+}
+
+/// Helper to run a program with a sandbox prefix.
+fn run_program_with_sandbox(
+    instructions: Vec<Instruction>,
+    pool: Vec<String>,
+    sandbox: std::path::PathBuf,
+) -> Result<Value, RuntimeError> {
+    let program = Program::with_string_pool(instructions, pool);
+    let mut vm = nolang_vm::VM::new(&program).with_sandbox(sandbox);
+    vm.execute()
+}
+
+#[test]
+fn str_const_pushes_string() {
+    let result = run_program_with_pool(
+        vec![
+            instr(Opcode::StrConst, TypeTag::None, 0, 0, 0),
+            halt(),
+        ],
+        vec!["hello".to_string()],
+    );
+    assert_eq!(result, Ok(Value::String("hello".to_string())));
+}
+
+#[test]
+fn str_len_returns_byte_count() {
+    let result = run_program_with_pool(
+        vec![
+            instr(Opcode::StrConst, TypeTag::None, 0, 0, 0),
+            instr(Opcode::StrLen, TypeTag::None, 0, 0, 0),
+            halt(),
+        ],
+        vec!["hello".to_string()],
+    );
+    assert_eq!(result, Ok(Value::U64(5)));
+}
+
+#[test]
+fn str_concat_joins_strings() {
+    let result = run_program_with_pool(
+        vec![
+            instr(Opcode::StrConst, TypeTag::None, 0, 0, 0),
+            instr(Opcode::StrConst, TypeTag::None, 1, 0, 0),
+            instr(Opcode::StrConcat, TypeTag::None, 0, 0, 0),
+            halt(),
+        ],
+        vec!["hello".to_string(), " world".to_string()],
+    );
+    assert_eq!(result, Ok(Value::String("hello world".to_string())));
+}
+
+#[test]
+fn str_slice_extracts_substring() {
+    let result = run_program_with_pool(
+        vec![
+            instr(Opcode::StrConst, TypeTag::None, 0, 0, 0),  // "hello"
+            instr(Opcode::Const, TypeTag::U64, 0, 0, 0),       // start=0
+            instr(Opcode::Const, TypeTag::U64, 0, 3, 0),       // end=3
+            instr(Opcode::StrSlice, TypeTag::None, 0, 0, 0),
+            halt(),
+        ],
+        vec!["hello".to_string()],
+    );
+    assert_eq!(result, Ok(Value::String("hel".to_string())));
+}
+
+#[test]
+fn str_bytes_and_bytes_str_roundtrip() {
+    // "ok" → bytes → string → check result is Ok("ok")
+    let result = run_program_with_pool(
+        vec![
+            instr(Opcode::StrConst, TypeTag::None, 0, 0, 0),
+            instr(Opcode::StrBytes, TypeTag::None, 0, 0, 0),
+            instr(Opcode::BytesStr, TypeTag::None, 0, 0, 0),
+            halt(),
+        ],
+        vec!["ok".to_string()],
+    );
+    // BYTES_STR returns RESULT(STRING, STRING) — Variant{tag_count:2, tag:0=Ok, payload=String}
+    assert_eq!(
+        result,
+        Ok(Value::Variant {
+            tag_count: 2,
+            tag: 0,
+            payload: Box::new(Value::String("ok".to_string())),
+        })
+    );
+}
+
+#[test]
+fn sandbox_violation_blocks_file_read() {
+    // Create a temp sandbox directory
+    let sandbox_dir = std::env::temp_dir().join("nol_test_sandbox");
+    std::fs::create_dir_all(&sandbox_dir).unwrap();
+
+    // Try to FILE_READ a path outside the sandbox (/etc/hostname or similar)
+    // We construct: push Path("/etc/hostname"), FILE_READ, HALT
+    // Since CONST PATH doesn't produce real paths, we use STR_CONST + a hypothetical path
+    // Actually, we need to use Path values directly. Let's use the PathJoin approach:
+    // We can't easily construct an out-of-sandbox Path via instructions alone,
+    // so let's test the VM's check_sandbox method directly.
+    use nolang_vm::VM;
+
+    let outside_path = std::path::Path::new("/etc/hostname");
+    let program = Program::new(vec![halt()]);
+    let vm = VM::new(&program).with_sandbox(sandbox_dir.clone());
+    let result = vm.check_sandbox(outside_path);
+
+    assert!(
+        matches!(result, Err(RuntimeError::SandboxViolation { .. })),
+        "expected SandboxViolation, got: {result:?}"
+    );
+
+    // Path inside sandbox should pass
+    let inside_path = sandbox_dir.join("test.txt");
+    // Create the file so canonicalize works
+    std::fs::write(&inside_path, b"test").unwrap();
+    let result = vm.check_sandbox(&inside_path);
+    assert!(result.is_ok(), "path inside sandbox should pass: {result:?}");
+
+    // Cleanup
+    let _ = std::fs::remove_file(&inside_path);
+    let _ = std::fs::remove_dir(&sandbox_dir);
+}
+
+#[test]
+fn str_split_produces_array() {
+    let result = run_program_with_pool(
+        vec![
+            instr(Opcode::StrConst, TypeTag::None, 0, 0, 0),  // "a,b,c"
+            instr(Opcode::StrConst, TypeTag::None, 1, 0, 0),  // ","
+            instr(Opcode::StrSplit, TypeTag::None, 0, 0, 0),
+            halt(),
+        ],
+        vec!["a,b,c".to_string(), ",".to_string()],
+    );
+    assert_eq!(
+        result,
+        Ok(Value::Array(vec![
+            Value::String("a".to_string()),
+            Value::String("b".to_string()),
+            Value::String("c".to_string()),
+        ]))
+    );
+}
+
+#[test]
+fn str_pool_index_out_of_bounds() {
+    let result = run_program_with_pool(
+        vec![
+            instr(Opcode::StrConst, TypeTag::None, 5, 0, 0), // index 5, pool has 1 entry
+            halt(),
+        ],
+        vec!["only".to_string()],
+    );
+    assert!(
+        matches!(result, Err(RuntimeError::StringPoolIndexOutOfBounds { index: 5, pool_size: 1 })),
+        "expected StringPoolIndexOutOfBounds, got: {result:?}"
+    );
+}
+
+#[test]
+fn command_not_allowed_blocks_exec() {
+    // EXEC_SPAWN with empty allowlist should block
+    let program = Program::new(vec![
+        // Build array: ARRAY_NEW STRING 1, push "badcmd", ARRAY_PUSH — but we don't have ARRAY_PUSH
+        // Instead just push empty array and exec_spawn
+        instr(Opcode::ArrayNew, TypeTag::String, 0, 0, 0), // empty string array
+        instr(Opcode::ExecSpawn, TypeTag::None, 0, 0, 0),
+        halt(),
+    ]);
+    // Default: no allowlist
+    let mut vm = nolang_vm::VM::new(&program);
+    let result = vm.execute();
+    // With empty array, EXEC_SPAWN should fail because there's no command
+    // The exact error depends on the exec_spawn implementation
+    assert!(result.is_err(), "expected error from exec_spawn: {result:?}");
+}

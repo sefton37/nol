@@ -4,6 +4,7 @@
 //! verification. Every error includes the instruction index (`at`) for
 //! debugging.
 
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Errors that occur during program execution.
@@ -91,6 +92,26 @@ pub enum RuntimeError {
     /// Type mismatch: expected a specific type but got something else.
     #[error("type mismatch at instruction {at}")]
     TypeMismatch { at: usize },
+
+    /// Path is outside the sandbox prefix.
+    #[error("sandbox violation: path {path} is outside prefix {prefix}")]
+    SandboxViolation { path: PathBuf, prefix: PathBuf },
+
+    /// Command not in allowlist.
+    #[error("command not allowed: {0}")]
+    CommandNotAllowed(String),
+
+    /// String pool index out of bounds.
+    #[error("string pool index {index} out of bounds (pool size {pool_size})")]
+    StringPoolIndexOutOfBounds { index: u16, pool_size: usize },
+
+    /// I/O error during file operation.
+    #[error("I/O error: {0}")]
+    IoError(String),
+
+    /// Type mismatch for I/O operation.
+    #[error("I/O type mismatch: expected {expected}, got {got}")]
+    IoTypeMismatch { expected: &'static str, got: String },
 }
 
 #[cfg(test)]

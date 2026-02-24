@@ -4,6 +4,24 @@ use crate::error::RuntimeError;
 use crate::machine::{CallFrame, VM};
 use nolang_common::{Instruction, Opcode, TypeTag, Value};
 
+/// Construct a RESULT Ok variant (tag 0).
+fn make_ok(value: Value) -> Value {
+    Value::Variant {
+        tag_count: 2,
+        tag: 0,
+        payload: Box::new(value),
+    }
+}
+
+/// Construct a RESULT Err variant (tag 1) carrying a String message.
+fn make_err(msg: String) -> Value {
+    Value::Variant {
+        tag_count: 2,
+        tag: 1,
+        payload: Box::new(Value::String(msg)),
+    }
+}
+
 impl<'a> VM<'a> {
     /// Execute the program until HALT or error.
     pub fn execute(&mut self) -> Result<Value, RuntimeError> {
@@ -118,6 +136,30 @@ impl<'a> VM<'a> {
                 Opcode::Assert => self.exec_assert()?,
                 Opcode::Typeof => self.exec_typeof(&instr)?,
                 Opcode::Forall => self.exec_forall(&instr)?,
+
+                // Group G: File & Path I/O
+                Opcode::FileRead => self.exec_file_read()?,
+                Opcode::FileWrite => self.exec_file_write()?,
+                Opcode::FileAppend => self.exec_file_append()?,
+                Opcode::FileExists => self.exec_file_exists()?,
+                Opcode::FileDelete => self.exec_file_delete()?,
+                Opcode::DirList => self.exec_dir_list()?,
+                Opcode::DirMake => self.exec_dir_make()?,
+                Opcode::PathJoin => self.exec_path_join()?,
+                Opcode::PathParent => self.exec_path_parent()?,
+
+                // Group H: String Operations
+                Opcode::StrLen => self.exec_str_len()?,
+                Opcode::StrConcat => self.exec_str_concat()?,
+                Opcode::StrSlice => self.exec_str_slice()?,
+                Opcode::StrSplit => self.exec_str_split()?,
+                Opcode::StrBytes => self.exec_str_bytes()?,
+                Opcode::BytesStr => self.exec_bytes_str()?,
+                Opcode::StrConst => self.exec_str_const(&instr)?,
+
+                // Group I: Process Execution
+                Opcode::ExecSpawn => self.exec_exec_spawn()?,
+                Opcode::ExecCheck => self.exec_exec_check()?,
             }
         }
     }
@@ -199,6 +241,30 @@ impl<'a> VM<'a> {
             Opcode::Assert => self.exec_assert(),
             Opcode::Typeof => self.exec_typeof(instr),
             Opcode::Forall => self.exec_forall(instr),
+
+            // Group G: File & Path I/O
+            Opcode::FileRead => self.exec_file_read(),
+            Opcode::FileWrite => self.exec_file_write(),
+            Opcode::FileAppend => self.exec_file_append(),
+            Opcode::FileExists => self.exec_file_exists(),
+            Opcode::FileDelete => self.exec_file_delete(),
+            Opcode::DirList => self.exec_dir_list(),
+            Opcode::DirMake => self.exec_dir_make(),
+            Opcode::PathJoin => self.exec_path_join(),
+            Opcode::PathParent => self.exec_path_parent(),
+
+            // Group H: String Operations
+            Opcode::StrLen => self.exec_str_len(),
+            Opcode::StrConcat => self.exec_str_concat(),
+            Opcode::StrSlice => self.exec_str_slice(),
+            Opcode::StrSplit => self.exec_str_split(),
+            Opcode::StrBytes => self.exec_str_bytes(),
+            Opcode::BytesStr => self.exec_bytes_str(),
+            Opcode::StrConst => self.exec_str_const(instr),
+
+            // Group I: Process Execution
+            Opcode::ExecSpawn => self.exec_exec_spawn(),
+            Opcode::ExecCheck => self.exec_exec_check(),
         }
     }
 
@@ -884,5 +950,469 @@ impl<'a> VM<'a> {
 
         self.push(value)?; // Non-destructive: push value back
         self.push(Value::Bool(matches)) // Then push result
+    }
+
+    // ---- Group G: File & Path I/O ----
+
+    fn exec_file_read(&mut self) -> Result<(), RuntimeError> {
+        let path_val = self.pop()?;
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.check_sandbox(&p)?;
+        let result = match std::fs::read(&p) {
+            Ok(bytes) => make_ok(Value::Bytes(bytes)),
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_file_write(&mut self) -> Result<(), RuntimeError> {
+        let data_val = self.pop()?;
+        let path_val = self.pop()?;
+        let b = match data_val {
+            Value::Bytes(b) => b,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Bytes",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.check_sandbox(&p)?;
+        let result = match std::fs::write(&p, &b) {
+            Ok(()) => make_ok(Value::Unit),
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_file_append(&mut self) -> Result<(), RuntimeError> {
+        use std::io::Write;
+        let data_val = self.pop()?;
+        let path_val = self.pop()?;
+        let b = match data_val {
+            Value::Bytes(b) => b,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Bytes",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.check_sandbox(&p)?;
+        let result = match std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&p)
+        {
+            Ok(mut f) => match f.write_all(&b) {
+                Ok(()) => make_ok(Value::Unit),
+                Err(e) => make_err(e.to_string()),
+            },
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_file_exists(&mut self) -> Result<(), RuntimeError> {
+        let path_val = self.pop()?;
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.check_sandbox(&p)?;
+        self.push(Value::Bool(p.exists()))
+    }
+
+    fn exec_file_delete(&mut self) -> Result<(), RuntimeError> {
+        let path_val = self.pop()?;
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.check_sandbox(&p)?;
+        let result = match std::fs::remove_file(&p) {
+            Ok(()) => make_ok(Value::Unit),
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_dir_list(&mut self) -> Result<(), RuntimeError> {
+        let path_val = self.pop()?;
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.check_sandbox(&p)?;
+        let result = match std::fs::read_dir(&p) {
+            Ok(entries) => {
+                let paths: Vec<Value> = entries
+                    .filter_map(|e| e.ok())
+                    .map(|e| Value::Path(e.path()))
+                    .collect();
+                make_ok(Value::Array(paths))
+            }
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_dir_make(&mut self) -> Result<(), RuntimeError> {
+        let path_val = self.pop()?;
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.check_sandbox(&p)?;
+        let result = match std::fs::create_dir_all(&p) {
+            Ok(()) => make_ok(Value::Unit),
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_path_join(&mut self) -> Result<(), RuntimeError> {
+        let component_val = self.pop()?;
+        let base_val = self.pop()?;
+        let s = match component_val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let p = match base_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.push(Value::Path(p.join(&s)))
+    }
+
+    fn exec_path_parent(&mut self) -> Result<(), RuntimeError> {
+        let path_val = self.pop()?;
+        let p = match path_val {
+            Value::Path(p) => p,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Path",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let result = match p.parent() {
+            Some(parent) => Value::Variant {
+                tag_count: 2,
+                tag: 0,
+                payload: Box::new(Value::Path(parent.to_path_buf())),
+            },
+            None => Value::Variant {
+                tag_count: 2,
+                tag: 1,
+                payload: Box::new(Value::Unit),
+            },
+        };
+        self.push(result)
+    }
+
+    // ---- Group H: String Operations ----
+
+    fn exec_str_len(&mut self) -> Result<(), RuntimeError> {
+        let val = self.pop()?;
+        let s = match val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.push(Value::U64(s.chars().count() as u64))
+    }
+
+    fn exec_str_concat(&mut self) -> Result<(), RuntimeError> {
+        let b_val = self.pop()?;
+        let a_val = self.pop()?;
+        let b = match b_val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let a = match a_val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.push(Value::String(a + &b))
+    }
+
+    fn exec_str_slice(&mut self) -> Result<(), RuntimeError> {
+        let end_val = self.pop()?;
+        let start_val = self.pop()?;
+        let s_val = self.pop()?;
+        let end = match end_val {
+            Value::U64(n) => n,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "U64",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let start = match start_val {
+            Value::U64(n) => n,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "U64",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let s = match s_val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let sliced: String = s
+            .chars()
+            .skip(start as usize)
+            .take((end - start) as usize)
+            .collect();
+        self.push(Value::String(sliced))
+    }
+
+    fn exec_str_split(&mut self) -> Result<(), RuntimeError> {
+        let delim_val = self.pop()?;
+        let s_val = self.pop()?;
+        let delim = match delim_val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let s = match s_val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let parts: Vec<Value> = s
+            .split(delim.as_str())
+            .map(|p| Value::String(p.to_string()))
+            .collect();
+        self.push(Value::Array(parts))
+    }
+
+    fn exec_str_bytes(&mut self) -> Result<(), RuntimeError> {
+        let val = self.pop()?;
+        let s = match val {
+            Value::String(s) => s,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.push(Value::Bytes(s.into_bytes()))
+    }
+
+    fn exec_bytes_str(&mut self) -> Result<(), RuntimeError> {
+        let val = self.pop()?;
+        let b = match val {
+            Value::Bytes(b) => b,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Bytes",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        let result = match String::from_utf8(b) {
+            Ok(s) => make_ok(Value::String(s)),
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_str_const(&mut self, instr: &Instruction) -> Result<(), RuntimeError> {
+        let index = instr.arg1;
+        if (index as usize) >= self.program.string_pool.len() {
+            return Err(RuntimeError::StringPoolIndexOutOfBounds {
+                index,
+                pool_size: self.program.string_pool.len(),
+            });
+        }
+        let s = self.program.string_pool[index as usize].clone();
+        self.push(Value::String(s))
+    }
+
+    // ---- Group I: Process Execution ----
+
+    fn exec_exec_spawn(&mut self) -> Result<(), RuntimeError> {
+        let args_val = self.pop()?;
+        let args = match args_val {
+            Value::Array(a) => a,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Array",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+
+        if args.is_empty() {
+            return Err(RuntimeError::IoTypeMismatch {
+                expected: "non-empty Array(String)",
+                got: "empty Array".to_string(),
+            });
+        }
+
+        // Extract command string (args[0])
+        let cmd_str = match &args[0] {
+            Value::String(s) => s.clone(),
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "String",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+
+        // Check allowlist
+        if !self.exec_allowlist.contains(&cmd_str) {
+            return Err(RuntimeError::CommandNotAllowed(cmd_str));
+        }
+
+        // Convert all args to strings
+        let mut string_args: Vec<String> = Vec::with_capacity(args.len());
+        for arg in &args {
+            match arg {
+                Value::String(s) => string_args.push(s.clone()),
+                other => {
+                    return Err(RuntimeError::IoTypeMismatch {
+                        expected: "String",
+                        got: format!("{:?}", other.type_tag()),
+                    })
+                }
+            }
+        }
+
+        let result = match std::process::Command::new(&string_args[0])
+            .args(&string_args[1..])
+            .output()
+        {
+            Ok(output) => {
+                let exit_code = Value::I64(output.status.code().unwrap_or(-1) as i64);
+                let stdout = Value::Bytes(output.stdout);
+                let stderr = Value::Bytes(output.stderr);
+                make_ok(Value::Tuple(vec![exit_code, stdout, stderr]))
+            }
+            Err(e) => make_err(e.to_string()),
+        };
+        self.push(result)
+    }
+
+    fn exec_exec_check(&mut self) -> Result<(), RuntimeError> {
+        let tuple_val = self.pop()?;
+        let fields = match tuple_val {
+            Value::Tuple(f) => f,
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "Tuple",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+
+        if fields.is_empty() {
+            return Err(RuntimeError::IoTypeMismatch {
+                expected: "Tuple with I64 exit code at index 0",
+                got: "empty Tuple".to_string(),
+            });
+        }
+
+        let result = match &fields[0] {
+            Value::I64(0) => make_ok(Value::Unit),
+            Value::I64(code) => make_err(format!("process exited with code {code}")),
+            other => {
+                return Err(RuntimeError::IoTypeMismatch {
+                    expected: "I64",
+                    got: format!("{:?}", other.type_tag()),
+                })
+            }
+        };
+        self.push(result)
     }
 }

@@ -1,5 +1,7 @@
 //! VM state management: stack, bindings, call stack, function table.
 
+use std::path::PathBuf;
+
 use crate::error::RuntimeError;
 use nolang_common::{Instruction, Opcode, Program, Value};
 
@@ -55,6 +57,10 @@ pub struct VM<'a> {
     /// If Some((body_end_pc, after_exhaust_pc)), we're executing a CASE body.
     /// When pc reaches body_end_pc, jump to after_exhaust_pc.
     pub(crate) case_contexts: Vec<(usize, usize)>,
+    /// Sandbox path prefix. If set, FILE_* ops on paths outside this prefix return Err.
+    pub(crate) sandbox_prefix: Option<PathBuf>,
+    /// Command allowlist for EXEC_SPAWN. If empty, all commands blocked.
+    pub(crate) exec_allowlist: Vec<String>,
 }
 
 impl<'a> VM<'a> {
@@ -68,7 +74,36 @@ impl<'a> VM<'a> {
             pc: 0,
             functions: Vec::new(),
             case_contexts: Vec::new(),
+            sandbox_prefix: None,
+            exec_allowlist: Vec::new(),
         }
+    }
+
+    /// Set sandbox prefix for file I/O operations.
+    pub fn with_sandbox(mut self, prefix: PathBuf) -> Self {
+        self.sandbox_prefix = Some(prefix);
+        self
+    }
+
+    /// Set allowed commands for EXEC_SPAWN.
+    pub fn with_exec_allowlist(mut self, allowlist: Vec<String>) -> Self {
+        self.exec_allowlist = allowlist;
+        self
+    }
+
+    /// Check if a path is within the sandbox prefix. Returns RuntimeError if not.
+    pub fn check_sandbox(&self, path: &std::path::Path) -> Result<(), RuntimeError> {
+        if let Some(ref prefix) = self.sandbox_prefix {
+            let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            let canonical_prefix = prefix.canonicalize().unwrap_or_else(|_| prefix.clone());
+            if !canonical.starts_with(&canonical_prefix) {
+                return Err(RuntimeError::SandboxViolation {
+                    path: path.to_path_buf(),
+                    prefix: canonical_prefix,
+                });
+            }
+        }
+        Ok(())
     }
 
     /// Pre-scan the program to locate all function definitions.
