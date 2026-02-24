@@ -278,6 +278,52 @@ HALT
 
 ---
 
+---
+
+## Example 10: String Operations
+
+**Intent:** Concatenate two strings and return the result's length.
+
+```nol
+STR_CONST "hello"
+STR_CONST " world"
+STR_CONCAT
+STR_LEN
+HALT
+```
+
+**Expected output:** `U64(11)`
+
+**Notes:**
+- STR_CONST pushes string constants from the string pool
+- STR_CONCAT pops two strings, pushes their concatenation
+- STR_LEN pops a string, pushes its byte length as U64
+- These are pure operations — no I/O involved
+
+---
+
+## Example 11: File Read with Error Handling
+
+**Intent:** Read a file and return its content length, or 0 on error.
+
+```nol
+STR_CONST "/tmp/test.txt"
+; (Would need STR_TO_PATH or similar — simplified for illustration)
+; FILE_READ returns RESULT(BYTES, STRING)
+; MATCH 2
+;   CASE 0 ...  ; OK: get byte length
+;   CASE 1 ...  ; ERR: return 0
+; EXHAUST
+HALT
+```
+
+**Notes:**
+- File I/O opcodes return RESULT types — errors must be handled
+- All FILE_* operations respect the sandbox prefix if set
+- This example is illustrative; full file I/O requires PATH construction
+
+---
+
 ## Summary: Test Matrix
 
 | Example | Opcodes Tested | Key Feature |
@@ -291,6 +337,7 @@ HALT
 | 7       | CONST, TUPLE_NEW, PROJECT, HALT | Tuple construction |
 | 8       | CONST, ARRAY_NEW, ARRAY_GET, HALT | Array operations |
 | 9       | FUNC, PRE, POST, TYPEOF, ASSERT, REF, LT, MATCH, CASE, NEG, RET, CALL, HALT | Full contracts |
+| 10      | STR_CONST, STR_CONCAT, STR_LEN, HALT | String operations |
 
 **Missing coverage (write additional programs for these):**
 - CONST_EXT (64-bit constants)

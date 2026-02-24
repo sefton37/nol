@@ -540,9 +540,57 @@ LLM generates program
 
 ---
 
+---
+
+## Phase 9: I/O Extension & RIVA Integration ✓ COMPLETE
+
+**Goal:** Extend NoLang with I/O capabilities and bridge to the Talking Rock RIVA agent.
+
+### 9a: Common Crate Extension
+- 4 new TypeTag variants (STRING, BYTES, PATH, HANDLE)
+- 4 new Value variants with runtime representations
+- 18 new Opcode variants (0x80–0x88, 0x90–0x96, 0xA0–0xA1)
+- String pool: `Program::with_string_pool()`, binary encode/decode
+
+### 9b: Assembler Extension
+- String literal lexing and parsing in STR_CONST instructions
+- Deduplication: identical strings share pool index
+- Roundtrip guarantee preserved: assemble → disassemble → reassemble = identical
+
+### 9c: Verifier Extension
+- Type checking for all 18 I/O opcodes
+- `EffectInContract` error: effectful opcodes forbidden in PRE/POST blocks
+- `is_effectful()` classification for opcode purity analysis
+
+### 9d: VM Extension
+- 18 opcode handlers in execute.rs
+- Sandbox enforcement: `--sandbox <path>` restricts FILE_*/DIR_* operations
+- EXEC_SPAWN command allowlisting
+- String pool runtime support (STR_CONST pushes from pool)
+
+### 9e: CLI Extension
+- `--sandbox <PATH>` flag for sandboxed execution
+- `--json` flag for structured JSON output
+- 3 new catalog modules: string_ops (15), file_ops (10), process_ops (5)
+
+### 9f: RIVA Bridge (Talking Rock)
+- Python `NolBridge` class wrapping CLI subprocess calls
+- `IntentToNolTranslator` converting RIVA intentions to NOL functions
+- Hash memoization cache for content-addressable verified programs
+- NOL_STRUCTURAL verification layer in RIVA's multi-layer pipeline
+
+### Gate ✓
+- 591 Rust tests passing (was 528)
+- 73 Python tests passing (bridge + integration + intent-to-nol)
+- String pool binary roundtrip verified
+- Sandbox violation test verified
+- EffectInContract test verified
+
+---
+
 ## Success Criteria for the Full Stack ✓ ALL PHASES COMPLETE
 
-Phases 1-8 are implemented and committed. The system satisfies:
+Phases 1-9 are implemented and committed. 591 Rust tests passing. The system satisfies:
 
 1. **Mechanical safety:** No program executes without passing structural verification.
 2. **Semantic coverage:** Intent is expressed through contracts, witnesses, and description — not just code.

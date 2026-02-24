@@ -77,7 +77,7 @@ That's it. Three crates depend on `common`. No crate depends on another non-comm
 - `encode(Instruction) → [u8; 8]` — instruction to bytes
 - `decode([u8; 8]) → Result<Instruction, DecodeError>` — bytes to instruction
 - `Program` struct — a vector of instructions with metadata
-- `Value` enum — runtime value representation (for VM use)
+- `Value` enum — runtime value representation (for VM use); includes String(String), Bytes(Vec<u8>), Path(PathBuf), Handle(u64) variants added in Phase 9
 - `NolangError` trait — common error interface
 
 **Does NOT contain:**
@@ -106,6 +106,9 @@ That's it. Three crates depend on `common`. No crate depends on another non-comm
 - Precondition failed
 - Postcondition failed
 - Stack overflow (exceeds 4096)
+- Sandbox violation (path outside sandbox prefix)
+- String pool index out of bounds
+- Command not allowed (EXEC_SPAWN with non-allowlisted command)
 
 **Key property:** The VM never panics. Any input (even unverified) produces either a `Value` or a `RuntimeError`. However, unverified input may produce *incorrect* results — the VM trusts the verifier.
 
@@ -312,6 +315,26 @@ One pair per line. `binary_b64` is base64-encoded binary.
 ## Extended Architecture (Phases 6-8) — Complete
 
 Phases 6-8 are implemented. See `SEMANTIC_VERIFICATION.md` for the full layered verification architecture.
+
+## Phase 9: I/O Extension & External Integration
+
+Phase 9 extends NoLang with real-world interaction capabilities:
+- **18 new opcodes** for string manipulation, file I/O, path operations, and process execution
+- **4 new type tags**: STRING (0x0D), BYTES (0x0E), PATH (0x0F), HANDLE (0x10)
+- **String pool**: Binary format extension for efficient string constant storage
+- **Sandbox model**: VM enforces path-prefix restrictions on all file operations
+- **JSON output mode**: `nolang run --json` for structured machine-readable results
+
+**External Integration (RIVA Bridge):**
+
+The `nolang` CLI serves as the integration point for external systems. The Talking Rock project has a Python `NolBridge` class (73 integration tests) that wraps the CLI via subprocess. The intended flow when RIVA unfreezes:
+1. LLM generates NoLang assembly
+2. `nolang assemble` → binary
+3. `nolang verify` → structural + contractual verification before execution
+4. `nolang run --sandbox <path>` → sandboxed execution
+5. Results feed back into RIVA's judgment system
+
+Note: RIVA development is currently frozen. The bridge infrastructure is complete and tested but not wired into production code paths.
 
 **Phase 6 (Semantic Layers):**
 - Rich contracts via IMPLIES (0x36) and FORALL (0x73) opcodes in `common`, enforced in `vm`, validated in `verifier`

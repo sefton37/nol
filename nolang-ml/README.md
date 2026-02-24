@@ -91,3 +91,20 @@ nolang-ml/
 ├── models/           # Saved LoRA adapters (gitignored)
 └── outputs/          # Generations, metrics, feedback (gitignored)
 ```
+
+## Phase 9: RIVA Session Ingestion
+
+The RIVA bridge infrastructure (Talking Rock project) is designed to generate NOL programs from natural language intent. When RIVA unfreezes and produces sessions, they become training data:
+
+```bash
+python scripts/ingest_riva_sessions.py /path/to/sessions/ --output data/splits/riva_pairs.nolt
+```
+
+### LoRA Configs
+
+| Config | Direction | Base Adapter | Notes |
+|--------|-----------|-------------|-------|
+| `lora_9a.yaml` | Intent → I/O Assembly | Phase 8 checkpoint | Includes I/O opcodes, temp=0.1 |
+| `lora_9b.yaml` | I/O Assembly → Description | Phase 7b checkpoint | Includes I/O descriptions, temp=0.3 |
+
+The feedback cycle script (`run_feedback_cycle.sh`) works with the expanded corpus including I/O programs.

@@ -48,9 +48,9 @@ nolang/
 
 ## Build Phases (ALL COMPLETE)
 
-All 8 phases are implemented and committed. 528 Rust tests passing.
+All 9 phases are implemented and committed. 591 Rust tests passing.
 
-1. **common** — Opcode enum (47 opcodes), TypeTag enum, Instruction struct, encode/decode
+1. **common** — Opcode enum (65 opcodes), TypeTag enum, Instruction struct, encode/decode
 2. **vm** — Execute instruction streams, stack management, pattern matching, functions
 3. **verifier** — Static checks: types, exhaustion, hashes, contracts, stack balance
 4. **assembler** — Text ↔ binary bidirectional translation
@@ -58,6 +58,7 @@ All 8 phases are implemented and committed. 528 Rust tests passing.
 6. **semantic layers** — Rich contracts (IMPLIES/FORALL), witness runner, 220 programs across 14 categories
 7. **LLM integration** — LoRA fine-tuning (intent→assembly, assembly→description), comparison UI
 8. **feedback loop** — Failure collection, error-aware retraining, improvement measurement
+9. **I/O extension** — 18 I/O opcodes (strings, files, paths, processes), string pool, sandbox model, RIVA bridge
 
 See `docs/BUILD_ORDER.md` for detailed acceptance criteria per phase.
 See `docs/SEMANTIC_VERIFICATION.md` for the layered verification architecture.
@@ -96,6 +97,8 @@ See `docs/SEMANTIC_VERIFICATION.md` for the layered verification architecture.
 4. **Exhaustive pattern matching is the only control flow.** No if/else, no loops. Recursion + match.
 5. **Contracts (PRE/POST) are structural, not comments.** They are part of the instruction stream.
 6. **HASH fields are mandatory on FUNC blocks.** Computed as blake3 over the block body.
+7. **I/O opcodes return RESULT.** Unhandled I/O results fail stack-balance. Effectful opcodes forbidden in contracts.
+8. **Sandbox enforcement is VM-level.** The VM restricts file access to a configurable path prefix.
 
 ## Reading Order for Context
 
@@ -103,7 +106,7 @@ If you need to understand the project:
 1. This file (CLAUDE.md)
 2. `docs/SPEC.md` — The instruction set. This is the constitution.
 3. `docs/ARCHITECTURE.md` — How components connect.
-4. `docs/BUILD_ORDER.md` — What to build and when (Phases 1-8).
+4. `docs/BUILD_ORDER.md` — What to build and when (Phases 1-9).
 5. `docs/EXAMPLES.md` — Concrete programs that ground the abstractions.
 6. `docs/SEMANTIC_VERIFICATION.md` — Layered verification architecture for Phases 6-8.
 

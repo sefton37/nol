@@ -194,8 +194,9 @@ These numbers are illustrative, not measured. The actual rates depend on contrac
 | 7b | Complete | LoRA fine-tuning: assembly → description | Layer 4 |
 | 7c | Complete | Interactive comparison UI with human feedback | Layer 4 |
 | 8 | Complete | Feedback loop: collect failures → build dataset → retrain → measure | All layers |
+| 9 | Complete | I/O Extension: 18 opcodes, string pool, sandbox, RIVA bridge | — |
 
-528 Rust tests passing. 1,338 training corpus entries. All 4 verification layers operational.
+591 Rust tests passing. 1,338 training corpus entries. All 4 verification layers operational.
 
 ## Open Questions
 
@@ -237,6 +238,8 @@ For complex programs with subtle intent, the residue grows. "Optimize the portfo
 The honest answer: the semantic gap never reaches zero. But it can be made small enough that the remaining risk is manageable, visible, and concentrated in the one place where human judgment is actually good — reading natural language.
 
 ## Relationship to ReOS
+
+> **Phase 9 Update:** The RIVA bridge infrastructure is complete. The Talking Rock project has a Python `NolBridge` wrapping the `nolang` CLI, an `IntentToNolTranslator`, and a `NOL_STRUCTURAL` verification layer (73 integration tests passing). RIVA development itself is frozen while CAIRN and ReOS prove small-model viability — when it unfreezes, the LLM will generate NoLang assembly, verify it through the CLI, and execute it in a sandboxed VM.
 
 NoLang with semantic verification is a component of the larger ReOS vision. The progression:
 

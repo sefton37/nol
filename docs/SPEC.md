@@ -52,8 +52,12 @@ Bit layout:
 | 0x0A  | MAYBE     | Optional. Sugar for VARIANT with 2 tags: SOME(0), NONE(1) | variable |
 | 0x0B  | RESULT    | Ok/Err. Sugar for VARIANT with 2 tags: OK(0), ERR(1) | variable |
 | 0x0C  | UNIT      | Zero-size type. The type of "nothing useful to return." | 0 |
+| 0x0D  | STRING    | UTF-8 string (heap-allocated)                           | variable |
+| 0x0E  | BYTES     | Binary content buffer                                   | variable |
+| 0x0F  | PATH      | Filesystem path (validated)                             | variable |
+| 0x10  | HANDLE    | Opaque process handle (VM-managed)                      | variable |
 
-Types 0x0D–0xFF are reserved. A verifier rejects any instruction using a reserved type tag.
+Types 0x11–0xFF are reserved. A verifier rejects any instruction using a reserved type tag.
 
 ### 3.2 Type Rules
 
@@ -218,20 +222,58 @@ PARAM instructions are included in body_len count.
 | HALT   | 0xFE  | -    | Stop execution. Top of stack is the program result. |
 | NOP    | 0xFF  | -    | No operation. Exists for alignment. Must have all arg fields = 0. |
 
-### 4.11 Reserved Ranges
+### 4.11 String Operations
 
-| Range       | Purpose                    |
-|-------------|----------------------------|
-| 0x00        | ILLEGAL — always rejected  |
-| 0x06–0x0F   | Reserved: future binding ops |
-| 0x16–0x1F   | Reserved: future arithmetic |
-| 0x26–0x2F   | Reserved: future comparison |
-| 0x37–0x3F   | Reserved: future logic ops  |
-| 0x43–0x4F   | Reserved: future control flow |
-| 0x58–0x5F   | Reserved: future function ops |
-| 0x66–0x6F   | Reserved: future data ops   |
-| 0x74–0x7F   | Reserved: future meta ops   |
-| 0x80–0xFD   | Reserved: future expansion  |
+| Opcode     | Value | Args            | Description |
+|------------|-------|-----------------|-------------|
+| STR_CONST  | 0x90  | arg1=pool_index | Push string constant from string pool at index `arg1`. |
+| STR_LEN    | 0x91  | -               | Pop STRING, push its length as U64. Pure. |
+| STR_CONCAT | 0x92  | -               | Pop two STRINGs, push their concatenation. Pure. |
+| STR_SLICE  | 0x93  | -               | Pop end (U64), pop start (U64), pop STRING, push substring. Pure. |
+| STR_SPLIT  | 0x94  | -               | Pop delimiter (STRING), pop STRING, push ARRAY(STRING). Pure. |
+| STR_BYTES  | 0x95  | -               | Pop STRING, push BYTES (UTF-8 encoded). Pure. |
+| BYTES_STR  | 0x96  | -               | Pop BYTES, push RESULT(STRING, STRING). Pure. |
+
+### 4.12 File & Path Operations
+
+| Opcode      | Value | Args | Description |
+|-------------|-------|------|-------------|
+| FILE_READ   | 0x80  | -    | Pop PATH, push RESULT(BYTES, STRING). Effectful. |
+| FILE_WRITE  | 0x81  | -    | Pop BYTES, pop PATH, push RESULT(UNIT, STRING). Effectful. |
+| FILE_APPEND | 0x82  | -    | Pop BYTES, pop PATH, push RESULT(UNIT, STRING). Effectful. |
+| FILE_EXISTS | 0x83  | -    | Pop PATH, push BOOL. Effectful. |
+| FILE_DELETE | 0x84  | -    | Pop PATH, push RESULT(UNIT, STRING). Effectful. |
+| DIR_LIST    | 0x85  | -    | Pop PATH, push RESULT(ARRAY(PATH), STRING). Effectful. |
+| DIR_MAKE    | 0x86  | -    | Pop PATH, push RESULT(UNIT, STRING). Effectful. |
+| PATH_JOIN   | 0x87  | -    | Pop STRING, pop PATH, push PATH. Pure. |
+| PATH_PARENT | 0x88  | -    | Pop PATH, push MAYBE(PATH). Pure. |
+
+### 4.13 Process Operations
+
+| Opcode     | Value | Args | Description |
+|------------|-------|------|-------------|
+| EXEC_SPAWN | 0xA0  | -    | Pop ARRAY(STRING), execute command, push RESULT(TUPLE(I64, BYTES, BYTES), STRING). Effectful. |
+| EXEC_CHECK | 0xA1  | -    | Pop TUPLE (exit_code, stdout, stderr), push RESULT(UNIT, STRING). Err if exit_code != 0. Pure. |
+
+### 4.14 Reserved Ranges
+
+| Range       | Purpose                           |
+|-------------|-----------------------------------|
+| 0x00        | ILLEGAL — always rejected         |
+| 0x06–0x0F   | Reserved: future binding ops      |
+| 0x16–0x1F   | Reserved: future arithmetic       |
+| 0x26–0x2F   | Reserved: future comparison       |
+| 0x37–0x3F   | Reserved: future logic ops        |
+| 0x43–0x4F   | Reserved: future control flow     |
+| 0x58–0x5F   | Reserved: future function ops     |
+| 0x66–0x6F   | Reserved: future data ops         |
+| 0x74–0x7F   | Reserved: future meta ops         |
+| 0x80–0x88   | File/path operations              |
+| 0x89–0x8F   | Reserved: future file/path ops    |
+| 0x90–0x96   | String operations                 |
+| 0x97–0x9F   | Reserved: future string ops       |
+| 0xA0–0xA1   | Process operations                |
+| 0xA2–0xFD   | Reserved: future expansion        |
 
 Any instruction with a reserved opcode is rejected by the verifier.
 
@@ -252,6 +294,23 @@ HALT
 4. Every FUNC block must contain exactly one RET instruction.
 5. The entry point is the first instruction after the last ENDFUNC (or the first instruction if there are no functions).
 6. The stack must contain exactly one value when HALT is reached.
+
+## 5.1 String Pool
+
+Programs containing `STR_CONST` instructions include a string pool in the binary format. The pool follows the instruction stream:
+
+```
+[instructions (8 bytes each)]
+[u32: pool entry count (little-endian)]
+[for each entry:
+  u32: byte length (little-endian)
+  [UTF-8 bytes]
+]
+```
+
+`STR_CONST arg1` references pool entry at index `arg1`. Pool entries are ordered by first appearance in the instruction stream (left-to-right scan). Duplicate strings are deduped.
+
+Programs without any `STR_CONST` instructions omit the pool entirely. The binary format for such programs is unchanged.
 
 ## 6. Hash Computation
 
@@ -294,3 +353,11 @@ To ensure exactly one representation per computation:
 | Max variant tags        | 256     | Practical limit for exhaustive matching. |
 | Max tuple fields        | 256     | Practical limit.                     |
 | Max array length        | 65,535  | Limited by u16 arg field.            |
+| Max string pool entries | 65,535  | Limited by u16 arg field of STR_CONST. |
+
+## 10. Safety Model
+
+- All I/O opcodes (FILE_*, DIR_*, EXEC_*) return RESULT types. Unhandled results fail stack-balance verification.
+- **I/O opcodes are forbidden in PRE/POST blocks.** Contracts must remain pure. The verifier emits `EffectInContract` for any effectful opcode inside a PRE or POST block.
+- The VM supports sandbox mode: a path prefix restricts all FILE_* and DIR_* operations. Paths outside the prefix produce `Err` results at runtime.
+- `EXEC_SPAWN` is restricted to an allowlisted set of commands. Attempts to execute non-allowlisted commands produce `Err`.
