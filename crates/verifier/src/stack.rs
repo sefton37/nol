@@ -188,6 +188,29 @@ fn stack_pops(instr: &Instruction) -> usize {
         Opcode::TupleNew => 0, // Dynamic (field_count)
         Opcode::ArrayNew => 0, // Dynamic (length)
         Opcode::Forall => 1,   // Pop array
+
+        // File & Path I/O — pop 1
+        Opcode::FileRead
+        | Opcode::FileExists
+        | Opcode::FileDelete
+        | Opcode::DirList
+        | Opcode::DirMake
+        | Opcode::PathParent
+        | Opcode::StrLen
+        | Opcode::StrBytes
+        | Opcode::BytesStr
+        | Opcode::ExecSpawn
+        | Opcode::ExecCheck => 1,
+
+        // Pop 2
+        Opcode::FileWrite | Opcode::FileAppend | Opcode::PathJoin | Opcode::StrConcat
+        | Opcode::StrSplit => 2,
+
+        // Pop 3
+        Opcode::StrSlice => 3,
+
+        // Push 1, pop 0
+        Opcode::StrConst => 0,
     }
 }
 
@@ -264,6 +287,39 @@ fn stack_delta(instr: &Instruction) -> i64 {
 
         // FORALL: pop 1 (array), push 1 (Bool) → 0
         Opcode::Forall => 0,
+
+        // File & Path I/O — pop 1, push 1 → 0
+        Opcode::FileRead
+        | Opcode::FileDelete
+        | Opcode::DirList
+        | Opcode::DirMake
+        | Opcode::PathParent
+        | Opcode::StrLen
+        | Opcode::StrBytes
+        | Opcode::BytesStr
+        | Opcode::ExecSpawn
+        | Opcode::ExecCheck => 0,
+
+        // FILE_EXISTS: pop 1 PATH, push 1 BOOL → 0
+        Opcode::FileExists => 0,
+
+        // FILE_WRITE, FILE_APPEND: pop 2, push 1 → -1
+        Opcode::FileWrite | Opcode::FileAppend => -1,
+
+        // PATH_JOIN: pop 2 (STRING + PATH), push 1 PATH → -1
+        Opcode::PathJoin => -1,
+
+        // STR_CONCAT: pop 2, push 1 → -1
+        Opcode::StrConcat => -1,
+
+        // STR_SPLIT: pop 2, push 1 → -1
+        Opcode::StrSplit => -1,
+
+        // STR_SLICE: pop 3, push 1 → -2
+        Opcode::StrSlice => -2,
+
+        // STR_CONST: push 1 → +1
+        Opcode::StrConst => 1,
     }
 }
 

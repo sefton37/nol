@@ -354,6 +354,264 @@ impl<'a> TypeChecker<'a> {
                     self.stack.push(TypeTag::U64);
                     pc += 1;
                 }
+                // --- File & Path I/O ---
+                Opcode::FileRead => {
+                    // pop PATH, push RESULT
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Path && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Path,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Result);
+                    pc += 1;
+                }
+                Opcode::FileWrite | Opcode::FileAppend => {
+                    // pop BYTES, pop PATH, push RESULT
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Bytes && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Bytes,
+                                found: tt,
+                            });
+                        }
+                    }
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Path && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Path,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Result);
+                    pc += 1;
+                }
+                Opcode::FileExists => {
+                    // pop PATH, push BOOL
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Path && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Path,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Bool);
+                    pc += 1;
+                }
+                Opcode::FileDelete | Opcode::DirList | Opcode::DirMake => {
+                    // pop PATH, push RESULT
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Path && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Path,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Result);
+                    pc += 1;
+                }
+                Opcode::PathJoin => {
+                    // pop STRING, pop PATH, push PATH
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Path && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Path,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Path);
+                    pc += 1;
+                }
+                Opcode::PathParent => {
+                    // pop PATH, push MAYBE
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Path && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Path,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Maybe);
+                    pc += 1;
+                }
+                // --- String Operations ---
+                Opcode::StrLen => {
+                    // pop STRING, push U64
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::U64);
+                    pc += 1;
+                }
+                Opcode::StrConcat => {
+                    // pop STRING, pop STRING, push STRING
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::String);
+                    pc += 1;
+                }
+                Opcode::StrSlice => {
+                    // pop U64 (end), pop U64 (start), pop STRING, push STRING
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::U64 && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::U64,
+                                found: tt,
+                            });
+                        }
+                    }
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::U64 && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::U64,
+                                found: tt,
+                            });
+                        }
+                    }
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::String);
+                    pc += 1;
+                }
+                Opcode::StrSplit => {
+                    // pop STRING (delimiter), pop STRING (source), push ARRAY
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Array);
+                    pc += 1;
+                }
+                Opcode::StrBytes => {
+                    // pop STRING, push BYTES
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::String && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::String,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Bytes);
+                    pc += 1;
+                }
+                Opcode::BytesStr => {
+                    // pop BYTES, push RESULT
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Bytes && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Bytes,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Result);
+                    pc += 1;
+                }
+                Opcode::StrConst => {
+                    // push STRING (no pops, arg1 = pool index)
+                    self.stack.push(TypeTag::String);
+                    pc += 1;
+                }
+                // --- Process Execution ---
+                Opcode::ExecSpawn => {
+                    // pop ARRAY (argv), push RESULT
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Array && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Array,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Result);
+                    pc += 1;
+                }
+                Opcode::ExecCheck => {
+                    // pop TUPLE (process result), push RESULT
+                    if let Some(tt) = self.stack.pop() {
+                        if tt != TypeTag::Tuple && tt != TypeTag::None {
+                            self.errors.push(VerifyError::TypeMismatch {
+                                at: pc,
+                                expected: TypeTag::Tuple,
+                                found: tt,
+                            });
+                        }
+                    }
+                    self.stack.push(TypeTag::Result);
+                    pc += 1;
+                }
                 Opcode::Hash | Opcode::Nop => {
                     pc += 1;
                 }
@@ -433,6 +691,100 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| matches!(e, VerifyError::UnresolvableRef { .. })));
+    }
+
+    #[test]
+    fn str_len_type_checked() {
+        let instrs = [
+            instr(Opcode::Const, TypeTag::String, 0, 0, 0),
+            instr(Opcode::StrLen, TypeTag::None, 0, 0, 0),
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ];
+        let (ctx, _) = check_structural(&instrs);
+        let errors = check_types(&instrs, &ctx);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn str_len_wrong_type_detected() {
+        let instrs = [
+            instr(Opcode::Const, TypeTag::I64, 0, 5, 0), // I64, not STRING
+            instr(Opcode::StrLen, TypeTag::None, 0, 0, 0),
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ];
+        let (ctx, _) = check_structural(&instrs);
+        let errors = check_types(&instrs, &ctx);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, VerifyError::TypeMismatch { .. })),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn str_const_pushes_string() {
+        let instrs = [
+            instr(Opcode::StrConst, TypeTag::None, 0, 0, 0), // pool index 0
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ];
+        let (ctx, _) = check_structural(&instrs);
+        let errors = check_types(&instrs, &ctx);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn str_concat_type_checked() {
+        let instrs = [
+            instr(Opcode::Const, TypeTag::String, 0, 0, 0),
+            instr(Opcode::Const, TypeTag::String, 0, 0, 0),
+            instr(Opcode::StrConcat, TypeTag::None, 0, 0, 0),
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ];
+        let (ctx, _) = check_structural(&instrs);
+        let errors = check_types(&instrs, &ctx);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn file_exists_type_checked() {
+        let instrs = [
+            instr(Opcode::Const, TypeTag::Path, 0, 0, 0),
+            instr(Opcode::FileExists, TypeTag::None, 0, 0, 0),
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ];
+        let (ctx, _) = check_structural(&instrs);
+        let errors = check_types(&instrs, &ctx);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn file_exists_wrong_type_detected() {
+        let instrs = [
+            instr(Opcode::Const, TypeTag::I64, 0, 5, 0), // I64, not PATH
+            instr(Opcode::FileExists, TypeTag::None, 0, 0, 0),
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ];
+        let (ctx, _) = check_structural(&instrs);
+        let errors = check_types(&instrs, &ctx);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, VerifyError::TypeMismatch { .. })),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn exec_spawn_type_checked() {
+        let instrs = [
+            instr(Opcode::ArrayNew, TypeTag::String, 0, 0, 0), // empty array
+            instr(Opcode::ExecSpawn, TypeTag::None, 0, 0, 0),
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0),
+        ];
+        let (ctx, _) = check_structural(&instrs);
+        let errors = check_types(&instrs, &ctx);
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]

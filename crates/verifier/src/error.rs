@@ -97,6 +97,10 @@ pub enum VerifyError {
     #[error("POST condition does not produce BOOL at instruction {at}")]
     PostConditionNotBool { at: usize },
 
+    /// Effectful (I/O) opcode used inside a PRE or POST contract block.
+    #[error("effectful opcode in contract block at instruction {at}")]
+    EffectInContract { at: usize },
+
     // --- Reachability ---
     /// Instruction is unreachable from any entry point.
     #[error("unreachable instruction at {at}")]
@@ -190,13 +194,14 @@ mod tests {
                 expected: 2,
                 found: 1,
             },
+            VerifyError::EffectInContract { at: 0 },
         ];
 
         for error in &errors {
             let display = error.to_string();
             assert!(!display.is_empty(), "empty display for {error:?}");
         }
-        // 21 variants from ARCHITECTURE.md + ParamCountMismatch
-        assert_eq!(errors.len(), 21);
+        // 21 variants from ARCHITECTURE.md + ParamCountMismatch + EffectInContract
+        assert_eq!(errors.len(), 22);
     }
 }

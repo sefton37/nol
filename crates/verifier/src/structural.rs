@@ -247,6 +247,26 @@ pub fn check_structural(instrs: &[Instruction]) -> (ProgramContext, Vec<VerifyEr
         fatal = true;
     }
 
+    // Check for effectful opcodes inside PRE/POST contract blocks
+    for func in &functions {
+        for &(_pre_pc, start, len) in &func.pre_conditions {
+            for i in 0..len as usize {
+                let instr_pc = start + i;
+                if instr_pc < instrs.len() && instrs[instr_pc].opcode.is_effectful() {
+                    errors.push(VerifyError::EffectInContract { at: instr_pc });
+                }
+            }
+        }
+        for &(_post_pc, start, len) in &func.post_conditions {
+            for i in 0..len as usize {
+                let instr_pc = start + i;
+                if instr_pc < instrs.len() && instrs[instr_pc].opcode.is_effectful() {
+                    errors.push(VerifyError::EffectInContract { at: instr_pc });
+                }
+            }
+        }
+    }
+
     // Find entry point
     let entry_point = functions.last().map(|f| f.endfunc_pc + 1).unwrap_or(0);
 
@@ -321,6 +341,30 @@ fn check_unused_fields(instr: &Instruction, at: usize, errors: &mut Vec<VerifyEr
         Opcode::Assert => (false, false, false, false),
         Opcode::Typeof => (false, true, false, false),
         Opcode::Forall => (false, true, false, false), // arg1 = body_len
+
+        // File & Path I/O (no argument fields used)
+        Opcode::FileRead
+        | Opcode::FileWrite
+        | Opcode::FileAppend
+        | Opcode::FileExists
+        | Opcode::FileDelete
+        | Opcode::DirList
+        | Opcode::DirMake
+        | Opcode::PathJoin
+        | Opcode::PathParent => (false, false, false, false),
+
+        // String Operations (no argument fields used, except StrConst)
+        Opcode::StrLen
+        | Opcode::StrConcat
+        | Opcode::StrSlice
+        | Opcode::StrSplit
+        | Opcode::StrBytes
+        | Opcode::BytesStr => (false, false, false, false),
+        // StrConst: arg1 = pool index (used), arg2/arg3 unused
+        Opcode::StrConst => (false, true, false, false),
+
+        // Process Execution (no argument fields used)
+        Opcode::ExecSpawn | Opcode::ExecCheck => (false, false, false, false),
 
         // VM Control
         Opcode::Halt => (false, false, false, false),
@@ -484,5 +528,59 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| matches!(e, VerifyError::NonZeroUnusedField { .. })));
+    }
+
+    #[test]
+    fn effectful_opcode_in_pre_detected() {
+        // FUNC with 1 param, PRE block containing FILE_READ (effectful).
+        // Instructions inside FUNC body (between FUNC and ENDFUNC, exclusive):
+        //   idx 1: PARAM
+        //   idx 2: PRE(1)
+        //   idx 3: FileRead  ← PRE body (effectful!)
+        //   idx 4: RET
+        //   idx 5: HASH
+        // body_len = 5 (indices 1..=5, not counting FUNC=0 or ENDFUNC=6)
+        let instrs = [
+            instr(Opcode::Func, TypeTag::None, 1, 5, 0), // 0: FUNC (1 param, body_len=5)
+            instr(Opcode::Param, TypeTag::I64, 0, 0, 0), // 1: PARAM
+            instr(Opcode::Pre, TypeTag::None, 1, 0, 0),  // 2: PRE(1)
+            instr(Opcode::FileRead, TypeTag::None, 0, 0, 0), // 3: effectful in PRE!
+            instr(Opcode::Ret, TypeTag::None, 0, 0, 0),  // 4: RET
+            instr(Opcode::Hash, TypeTag::None, 0, 0, 0), // 5: HASH
+            instr(Opcode::EndFunc, TypeTag::None, 0, 0, 0), // 6: ENDFUNC
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0), // 7
+        ];
+        let (_, errors) = check_structural(&instrs);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, VerifyError::EffectInContract { at: 3 })),
+            "expected EffectInContract at 3, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn pure_opcode_in_pre_passes() {
+        // FUNC with 1 param, PRE block containing STR_LEN (pure, not effectful).
+        // body_len = 5: PARAM + PRE(1) + StrLen + RET + HASH
+        let instrs = [
+            instr(Opcode::Func, TypeTag::None, 1, 5, 0), // 0: FUNC (1 param, body_len=5)
+            instr(Opcode::Param, TypeTag::I64, 0, 0, 0), // 1: PARAM
+            instr(Opcode::Pre, TypeTag::None, 1, 0, 0),  // 2: PRE(1)
+            instr(Opcode::StrLen, TypeTag::None, 0, 0, 0), // 3: pure string op — OK in PRE
+            instr(Opcode::Ret, TypeTag::None, 0, 0, 0),  // 4: RET
+            instr(Opcode::Hash, TypeTag::None, 0, 0, 0), // 5: HASH
+            instr(Opcode::EndFunc, TypeTag::None, 0, 0, 0), // 6: ENDFUNC
+            instr(Opcode::Halt, TypeTag::None, 0, 0, 0), // 7
+        ];
+        let (_, errors) = check_structural(&instrs);
+        let effect_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e, VerifyError::EffectInContract { .. }))
+            .collect();
+        assert!(
+            effect_errors.is_empty(),
+            "unexpected EffectInContract errors: {effect_errors:?}"
+        );
     }
 }
