@@ -600,3 +600,148 @@ mod tests {
         assert_eq!(result, JsonValue::Number(0.0));
     }
 }
+
+// ---- Output formatting helpers ----
+
+/// Escape a string for JSON output (with surrounding quotes).
+fn json_escape_str(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Serialize a `Value` to a JSON object string.
+///
+/// Used by the `--json` output mode of the `run` command.
+pub fn value_to_json(value: &nolang_common::Value) -> String {
+    use nolang_common::Value;
+    match value {
+        Value::I64(n) => format!("{{\"type\":\"I64\",\"value\":{n}}}"),
+        Value::U64(n) => format!("{{\"type\":\"U64\",\"value\":{n}}}"),
+        Value::F64(n) => format!("{{\"type\":\"F64\",\"value\":{n}}}"),
+        Value::Bool(b) => format!("{{\"type\":\"Bool\",\"value\":{b}}}"),
+        Value::Char(c) => {
+            let s = json_escape_str(&c.to_string());
+            format!("{{\"type\":\"Char\",\"value\":{s}}}")
+        }
+        Value::Unit => "{\"type\":\"Unit\"}".to_string(),
+        Value::String(s) => {
+            let escaped = json_escape_str(s);
+            format!("{{\"type\":\"String\",\"value\":{escaped}}}")
+        }
+        Value::Bytes(b) => {
+            format!("{{\"type\":\"Bytes\",\"length\":{}}}", b.len())
+        }
+        Value::Path(p) => {
+            let s = json_escape_str(&p.to_string_lossy());
+            format!("{{\"type\":\"Path\",\"value\":{s}}}")
+        }
+        Value::Handle(h) => format!("{{\"type\":\"Handle\",\"value\":{h}}}"),
+        Value::Variant {
+            tag_count,
+            tag,
+            payload,
+        } => {
+            let payload_json = value_to_json(payload);
+            format!(
+                "{{\"type\":\"Variant\",\"tag_count\":{tag_count},\"tag\":{tag},\"payload\":{payload_json}}}"
+            )
+        }
+        Value::Tuple(elems) => {
+            let parts: Vec<String> = elems.iter().map(value_to_json).collect();
+            format!("{{\"type\":\"Tuple\",\"elements\":[{}]}}", parts.join(","))
+        }
+        Value::Array(elems) => {
+            let parts: Vec<String> = elems.iter().map(value_to_json).collect();
+            format!("{{\"type\":\"Array\",\"elements\":[{}]}}", parts.join(","))
+        }
+    }
+}
+
+/// Format a successful result as a JSON response object.
+pub fn format_ok_json(value: &nolang_common::Value) -> String {
+    let value_json = value_to_json(value);
+    format!("{{\"status\":\"ok\",\"result\":{value_json}}}")
+}
+
+/// Format an error as a JSON response object.
+pub fn format_error_json(error_type: &str, message: &str) -> String {
+    let msg = json_escape_str(message);
+    format!("{{\"status\":\"error\",\"error_type\":\"{error_type}\",\"message\":{msg}}}")
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    use nolang_common::Value;
+
+    #[test]
+    fn value_i64_to_json() {
+        let v = Value::I64(42);
+        assert_eq!(value_to_json(&v), r#"{"type":"I64","value":42}"#);
+    }
+
+    #[test]
+    fn value_i64_negative_to_json() {
+        let v = Value::I64(-13);
+        assert_eq!(value_to_json(&v), r#"{"type":"I64","value":-13}"#);
+    }
+
+    #[test]
+    fn value_bool_true_to_json() {
+        let v = Value::Bool(true);
+        assert_eq!(value_to_json(&v), r#"{"type":"Bool","value":true}"#);
+    }
+
+    #[test]
+    fn value_unit_to_json() {
+        let v = Value::Unit;
+        assert_eq!(value_to_json(&v), r#"{"type":"Unit"}"#);
+    }
+
+    #[test]
+    fn value_string_to_json() {
+        let v = Value::String("hello".to_string());
+        assert_eq!(value_to_json(&v), r#"{"type":"String","value":"hello"}"#);
+    }
+
+    #[test]
+    fn value_string_escapes_to_json() {
+        let v = Value::String("say \"hi\"".to_string());
+        assert_eq!(
+            value_to_json(&v),
+            r#"{"type":"String","value":"say \"hi\""}"#
+        );
+    }
+
+    #[test]
+    fn format_ok_json_wraps_value() {
+        let v = Value::I64(42);
+        let result = format_ok_json(&v);
+        assert!(result.contains("\"status\":\"ok\""));
+        assert!(result.contains("\"type\":\"I64\""));
+        assert!(result.contains("\"value\":42"));
+    }
+
+    #[test]
+    fn format_error_json_wraps_message() {
+        let result = format_error_json("runtime", "division by zero at instruction 5");
+        assert!(result.contains("\"status\":\"error\""));
+        assert!(result.contains("\"error_type\":\"runtime\""));
+        assert!(result.contains("division by zero"));
+    }
+}

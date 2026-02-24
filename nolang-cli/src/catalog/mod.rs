@@ -1,4 +1,4 @@
-//! Program catalog — 220 program specifications for corpus generation.
+//! Program catalog — 250 program specifications for corpus generation.
 //!
 //! Each program is defined as a `ProgramSpec` with assembly template,
 //! natural-language intent, and optional witness test cases.
@@ -10,11 +10,14 @@ pub mod boolean_logic;
 pub mod char_ops;
 pub mod comparison;
 pub mod constants;
+pub mod file_ops;
 pub mod integer_math;
 pub mod multi_function;
 pub mod pattern_match;
+pub mod process_ops;
 pub mod recursive;
 pub mod rich_contracts;
+pub mod string_ops;
 pub mod tuple_variant;
 pub mod type_ops;
 
@@ -70,11 +73,14 @@ pub enum Category {
     Constants,
     BindingDrop,
     CharOps,
+    StringOps,
+    FileOps,
+    ProcessOps,
 }
 
-/// Collect all 220 program specifications from every category module.
+/// Collect all program specifications from every category module.
 pub fn all_programs() -> Vec<ProgramSpec> {
-    let mut programs = Vec::with_capacity(220);
+    let mut programs = Vec::with_capacity(250);
     programs.extend(integer_math::programs());
     programs.extend(comparison::programs());
     programs.extend(boolean_logic::programs());
@@ -89,6 +95,9 @@ pub fn all_programs() -> Vec<ProgramSpec> {
     programs.extend(constants::programs());
     programs.extend(binding_drop::programs());
     programs.extend(char_ops::programs());
+    programs.extend(string_ops::programs());
+    programs.extend(file_ops::programs());
+    programs.extend(process_ops::programs());
     programs
 }
 
@@ -109,6 +118,9 @@ impl std::fmt::Display for Category {
             Category::Constants => write!(f, "constants"),
             Category::BindingDrop => write!(f, "binding_drop"),
             Category::CharOps => write!(f, "char_ops"),
+            Category::StringOps => write!(f, "string_ops"),
+            Category::FileOps => write!(f, "file_ops"),
+            Category::ProcessOps => write!(f, "process_ops"),
         }
     }
 }

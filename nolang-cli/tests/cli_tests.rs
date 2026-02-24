@@ -96,7 +96,8 @@ fn assemble_simple_program() {
 
     assert!(output.exists());
     let bytes = fs::read(&output).unwrap();
-    assert_eq!(bytes.len(), 16); // 2 instructions * 8 bytes
+    // New binary format: 4 (instr count header) + 2*8 (instructions) + 4 (pool count) = 24 bytes
+    assert_eq!(bytes.len(), 24);
 }
 
 #[test]

@@ -250,7 +250,12 @@ fn patch_hashes(program: &Program) -> Result<Program, String> {
         }
     }
 
-    Ok(Program::new(instructions))
+    // Preserve the string pool from the original program.
+    if program.string_pool.is_empty() {
+        Ok(Program::new(instructions))
+    } else {
+        Ok(Program::with_string_pool(instructions, program.string_pool.clone()))
+    }
 }
 
 /// Convert WitnessValue to Value.

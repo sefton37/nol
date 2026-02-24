@@ -74,32 +74,102 @@ pub fn verify(args: &[String]) -> Result<(), i32> {
 }
 
 /// Verify and execute a .nolb binary program.
+///
+/// Flags:
+/// - `--sandbox <PATH>`: restrict file I/O to paths inside the given prefix
+/// - `--json`: emit structured JSON output instead of human-readable text
 pub fn run(args: &[String]) -> Result<(), i32> {
     if args.is_empty() {
         eprintln!("error: run requires an input file");
-        eprintln!("Usage: nolang run <input.nolb>");
+        eprintln!("Usage: nolang run <input.nolb> [--sandbox PATH] [--json]");
         return Err(1);
     }
 
+    // Parse flags: --sandbox and --json may appear anywhere after the file arg.
     let input = &args[0];
+    let mut sandbox: Option<std::path::PathBuf> = None;
+    let mut json_output = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--sandbox" => {
+                if i + 1 < args.len() {
+                    sandbox = Some(std::path::PathBuf::from(&args[i + 1]));
+                    i += 2;
+                } else {
+                    eprintln!("error: --sandbox requires a path argument");
+                    return Err(1);
+                }
+            }
+            "--json" => {
+                json_output = true;
+                i += 1;
+            }
+            other => {
+                eprintln!("error: unknown flag '{other}'");
+                eprintln!("Usage: nolang run <input.nolb> [--sandbox PATH] [--json]");
+                return Err(1);
+            }
+        }
+    }
+
     let program = read_binary(input)?;
 
     // Verify first
     if let Err(errors) = nolang_verifier::verify(&program) {
-        for e in &errors {
-            eprintln!("error: {e}");
+        if json_output {
+            let msg = errors
+                .iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            println!("{}", nolang_cli::json::format_error_json("verification", &msg));
+        } else {
+            for e in &errors {
+                eprintln!("error: {e}");
+            }
         }
         return Err(2);
     }
 
+    // Build VM with optional sandbox and default exec allowlist
+    let default_allowlist = vec![
+        "pytest".to_string(),
+        "ruff".to_string(),
+        "mypy".to_string(),
+        "cargo".to_string(),
+        "test".to_string(),
+    ];
+
+    let vm_base = nolang_vm::VM::new(&program)
+        .with_exec_allowlist(default_allowlist);
+
+    let mut vm = if let Some(prefix) = sandbox {
+        vm_base.with_sandbox(prefix)
+    } else {
+        vm_base
+    };
+
     // Execute
-    match nolang_vm::run(&program) {
+    match vm.execute() {
         Ok(value) => {
-            println!("{value}");
+            if json_output {
+                println!("{}", nolang_cli::json::format_ok_json(&value));
+            } else {
+                println!("{value}");
+            }
             Ok(())
         }
         Err(e) => {
-            eprintln!("runtime error: {e}");
+            if json_output {
+                println!(
+                    "{}",
+                    nolang_cli::json::format_error_json("runtime", &e.to_string())
+                );
+            } else {
+                eprintln!("runtime error: {e}");
+            }
             Err(3)
         }
     }
