@@ -37,10 +37,18 @@ pub enum TypeTag {
     Result = 0x0B,
     /// Zero-size type.
     Unit = 0x0C,
+    /// UTF-8 string (heap-allocated).
+    String = 0x0D,
+    /// Binary content buffer.
+    Bytes = 0x0E,
+    /// Filesystem path (validated, normalized).
+    Path = 0x0F,
+    /// Opaque process handle (VM-managed lifetime).
+    Handle = 0x10,
 }
 
 /// All valid type tags, in definition order.
-pub const ALL_TYPE_TAGS: [TypeTag; 13] = [
+pub const ALL_TYPE_TAGS: [TypeTag; 17] = [
     TypeTag::None,
     TypeTag::I64,
     TypeTag::U64,
@@ -54,6 +62,10 @@ pub const ALL_TYPE_TAGS: [TypeTag; 13] = [
     TypeTag::Maybe,
     TypeTag::Result,
     TypeTag::Unit,
+    TypeTag::String,
+    TypeTag::Bytes,
+    TypeTag::Path,
+    TypeTag::Handle,
 ];
 
 impl TryFrom<u8> for TypeTag {
@@ -74,7 +86,11 @@ impl TryFrom<u8> for TypeTag {
             0x0A => Ok(TypeTag::Maybe),
             0x0B => Ok(TypeTag::Result),
             0x0C => Ok(TypeTag::Unit),
-            0x0D..=0xFF => Err(DecodeError::ReservedTypeTag(value)),
+            0x0D => Ok(TypeTag::String),
+            0x0E => Ok(TypeTag::Bytes),
+            0x0F => Ok(TypeTag::Path),
+            0x10 => Ok(TypeTag::Handle),
+            0x11..=0xFF => Err(DecodeError::ReservedTypeTag(value)),
         }
     }
 }
@@ -96,6 +112,10 @@ impl TypeTag {
             TypeTag::Maybe => "MAYBE",
             TypeTag::Result => "RESULT",
             TypeTag::Unit => "UNIT",
+            TypeTag::String => "STRING",
+            TypeTag::Bytes => "BYTES",
+            TypeTag::Path => "PATH",
+            TypeTag::Handle => "HANDLE",
         }
     }
 
@@ -112,7 +132,7 @@ mod tests {
 
     #[test]
     fn all_type_tags_count() {
-        assert_eq!(ALL_TYPE_TAGS.len(), 13);
+        assert_eq!(ALL_TYPE_TAGS.len(), 17);
     }
 
     #[test]
@@ -126,7 +146,7 @@ mod tests {
 
     #[test]
     fn reserved_type_tags() {
-        for byte in 0x0D..=0xFFu8 {
+        for byte in 0x11..=0xFFu8 {
             assert_eq!(
                 TypeTag::try_from(byte),
                 Err(DecodeError::ReservedTypeTag(byte)),

@@ -203,6 +203,10 @@ impl Instruction {
             Value::Variant { .. } => Err("cannot encode compound value as CONST"),
             Value::Tuple(_) => Err("cannot encode compound value as CONST"),
             Value::Array(_) => Err("cannot encode compound value as CONST"),
+            Value::String(_) => Err("cannot encode string as CONST (use STR_CONST)"),
+            Value::Bytes(_) => Err("cannot encode bytes as CONST"),
+            Value::Path(_) => Err("cannot encode path as CONST"),
+            Value::Handle(_) => Err("cannot encode handle as CONST"),
         }
     }
 }
@@ -300,10 +304,10 @@ mod tests {
 
     #[test]
     fn decode_rejects_reserved_type_tag() {
-        let bytes = [0x01, 0x0D, 0, 0, 0, 0, 0, 0]; // Bind + reserved tag
+        let bytes = [0x01, 0x11, 0, 0, 0, 0, 0, 0]; // Bind + reserved tag
         assert_eq!(
             Instruction::decode(bytes),
-            Err(DecodeError::ReservedTypeTag(0x0D))
+            Err(DecodeError::ReservedTypeTag(0x11))
         );
     }
 

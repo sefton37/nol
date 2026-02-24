@@ -3,6 +3,7 @@
 //! Values are what live on the stack during execution.
 
 use std::fmt;
+use std::path::PathBuf;
 
 use crate::type_tag::TypeTag;
 
@@ -38,6 +39,14 @@ pub enum Value {
     Tuple(Vec<Value>),
     /// Fixed-size array (all elements same type).
     Array(Vec<Value>),
+    /// UTF-8 string.
+    String(String),
+    /// Binary content buffer.
+    Bytes(Vec<u8>),
+    /// Filesystem path.
+    Path(PathBuf),
+    /// Opaque process handle (VM-managed lifetime).
+    Handle(u64),
 }
 
 // We use bitwise equality for F64 values via to_bits(). This means
@@ -69,6 +78,10 @@ impl PartialEq for Value {
             ) => tc1 == tc2 && t1 == t2 && p1 == p2,
             (Value::Tuple(a), Value::Tuple(b)) => a == b,
             (Value::Array(a), Value::Array(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Bytes(a), Value::Bytes(b)) => a == b,
+            (Value::Path(a), Value::Path(b)) => a == b,
+            (Value::Handle(a), Value::Handle(b)) => a == b,
             _ => false,
         }
     }
@@ -110,6 +123,10 @@ impl fmt::Display for Value {
                 }
                 write!(f, "]")
             }
+            Value::String(s) => write!(f, "String({s:?})"),
+            Value::Bytes(b) => write!(f, "Bytes({} bytes)", b.len()),
+            Value::Path(p) => write!(f, "Path({})", p.display()),
+            Value::Handle(h) => write!(f, "Handle({h})"),
         }
     }
 }
@@ -127,6 +144,10 @@ impl Value {
             Value::Variant { .. } => TypeTag::Variant,
             Value::Tuple(_) => TypeTag::Tuple,
             Value::Array(_) => TypeTag::Array,
+            Value::String(_) => TypeTag::String,
+            Value::Bytes(_) => TypeTag::Bytes,
+            Value::Path(_) => TypeTag::Path,
+            Value::Handle(_) => TypeTag::Handle,
         }
     }
 }

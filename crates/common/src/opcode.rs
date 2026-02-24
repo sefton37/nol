@@ -119,6 +119,48 @@ pub enum Opcode {
     /// Universal quantifier for arrays. Pop array, execute body for each element.
     Forall = 0x73,
 
+    // 4.11 File & Path I/O
+    /// Read file contents. PATH → RESULT(BYTES, STRING).
+    FileRead = 0x80,
+    /// Write bytes to file. PATH × BYTES → RESULT(UNIT, STRING).
+    FileWrite = 0x81,
+    /// Append bytes to file. PATH × BYTES → RESULT(UNIT, STRING).
+    FileAppend = 0x82,
+    /// Check if file exists. PATH → BOOL.
+    FileExists = 0x83,
+    /// Delete file. PATH → RESULT(UNIT, STRING).
+    FileDelete = 0x84,
+    /// List directory entries. PATH → RESULT(ARRAY(PATH), STRING).
+    DirList = 0x85,
+    /// Create directory (and parents). PATH → RESULT(UNIT, STRING).
+    DirMake = 0x86,
+    /// Join path components. PATH × STRING → PATH (pure).
+    PathJoin = 0x87,
+    /// Get parent directory. PATH → MAYBE(PATH) (pure).
+    PathParent = 0x88,
+
+    // 4.12 String Operations
+    /// Get string length in characters. STRING → U64 (pure).
+    StrLen = 0x90,
+    /// Concatenate two strings. STRING × STRING → STRING (pure).
+    StrConcat = 0x91,
+    /// Slice string by character indices. STRING × U64 × U64 → STRING (pure).
+    StrSlice = 0x92,
+    /// Split string by delimiter. STRING × STRING → ARRAY(STRING) (pure).
+    StrSplit = 0x93,
+    /// Convert string to bytes. STRING → BYTES (pure).
+    StrBytes = 0x94,
+    /// Convert bytes to string. BYTES → RESULT(STRING, STRING) (pure).
+    BytesStr = 0x95,
+    /// Push string constant from pool. arg1 = pool_index. → STRING (pure).
+    StrConst = 0x96,
+
+    // 4.13 Process Execution
+    /// Spawn subprocess. ARRAY(STRING) → RESULT(TUPLE(I64, BYTES, BYTES), STRING).
+    ExecSpawn = 0xA0,
+    /// Check subprocess result. TUPLE → RESULT(UNIT, STRING).
+    ExecCheck = 0xA1,
+
     // 4.10 VM Control
     /// Stop execution. Top of stack is the program result.
     Halt = 0xFE,
@@ -127,7 +169,7 @@ pub enum Opcode {
 }
 
 /// All valid opcodes, in definition order. Useful for exhaustive testing.
-pub const ALL_OPCODES: [Opcode; 47] = [
+pub const ALL_OPCODES: [Opcode; 65] = [
     Opcode::Bind,
     Opcode::Ref,
     Opcode::Drop,
@@ -173,6 +215,24 @@ pub const ALL_OPCODES: [Opcode; 47] = [
     Opcode::Assert,
     Opcode::Typeof,
     Opcode::Forall,
+    Opcode::FileRead,
+    Opcode::FileWrite,
+    Opcode::FileAppend,
+    Opcode::FileExists,
+    Opcode::FileDelete,
+    Opcode::DirList,
+    Opcode::DirMake,
+    Opcode::PathJoin,
+    Opcode::PathParent,
+    Opcode::StrLen,
+    Opcode::StrConcat,
+    Opcode::StrSlice,
+    Opcode::StrSplit,
+    Opcode::StrBytes,
+    Opcode::BytesStr,
+    Opcode::StrConst,
+    Opcode::ExecSpawn,
+    Opcode::ExecCheck,
     Opcode::Halt,
     Opcode::Nop,
 ];
@@ -247,13 +307,38 @@ impl TryFrom<u8> for Opcode {
             0x72 => Ok(Opcode::Typeof),
             0x73 => Ok(Opcode::Forall),
 
+            // 4.11 File & Path I/O
+            0x80 => Ok(Opcode::FileRead),
+            0x81 => Ok(Opcode::FileWrite),
+            0x82 => Ok(Opcode::FileAppend),
+            0x83 => Ok(Opcode::FileExists),
+            0x84 => Ok(Opcode::FileDelete),
+            0x85 => Ok(Opcode::DirList),
+            0x86 => Ok(Opcode::DirMake),
+            0x87 => Ok(Opcode::PathJoin),
+            0x88 => Ok(Opcode::PathParent),
+
+            // 4.12 String Operations
+            0x90 => Ok(Opcode::StrLen),
+            0x91 => Ok(Opcode::StrConcat),
+            0x92 => Ok(Opcode::StrSlice),
+            0x93 => Ok(Opcode::StrSplit),
+            0x94 => Ok(Opcode::StrBytes),
+            0x95 => Ok(Opcode::BytesStr),
+            0x96 => Ok(Opcode::StrConst),
+
+            // 4.13 Process Execution
+            0xA0 => Ok(Opcode::ExecSpawn),
+            0xA1 => Ok(Opcode::ExecCheck),
+
             // 4.10 VM Control
             0xFE => Ok(Opcode::Halt),
             0xFF => Ok(Opcode::Nop),
 
-            // All remaining values are reserved (SPEC.md Section 4.11).
+            // All remaining values are reserved.
             // This covers 0x06..=0x0F, 0x16..=0x1F, 0x26..=0x2F, 0x37..=0x3F,
-            // 0x43..=0x4F, 0x58..=0x5F, 0x66..=0x6F, 0x74..=0x7F, 0x80..=0xFD.
+            // 0x43..=0x4F, 0x58..=0x5F, 0x66..=0x6F, 0x74..=0x7F, 0x89..=0x8F,
+            // 0x97..=0x9F, 0xA2..=0xFD.
             _ => Err(DecodeError::ReservedOpcode(value)),
         }
     }
@@ -308,9 +393,69 @@ impl Opcode {
             Opcode::Assert => "ASSERT",
             Opcode::Typeof => "TYPEOF",
             Opcode::Forall => "FORALL",
+            Opcode::FileRead => "FILE_READ",
+            Opcode::FileWrite => "FILE_WRITE",
+            Opcode::FileAppend => "FILE_APPEND",
+            Opcode::FileExists => "FILE_EXISTS",
+            Opcode::FileDelete => "FILE_DELETE",
+            Opcode::DirList => "DIR_LIST",
+            Opcode::DirMake => "DIR_MAKE",
+            Opcode::PathJoin => "PATH_JOIN",
+            Opcode::PathParent => "PATH_PARENT",
+            Opcode::StrLen => "STR_LEN",
+            Opcode::StrConcat => "STR_CONCAT",
+            Opcode::StrSlice => "STR_SLICE",
+            Opcode::StrSplit => "STR_SPLIT",
+            Opcode::StrBytes => "STR_BYTES",
+            Opcode::BytesStr => "BYTES_STR",
+            Opcode::StrConst => "STR_CONST",
+            Opcode::ExecSpawn => "EXEC_SPAWN",
+            Opcode::ExecCheck => "EXEC_CHECK",
             Opcode::Halt => "HALT",
             Opcode::Nop => "NOP",
         }
+    }
+
+    /// Returns true if this opcode performs I/O (effectful or pure I/O-related).
+    pub fn is_io(&self) -> bool {
+        matches!(
+            self,
+            Opcode::FileRead
+                | Opcode::FileWrite
+                | Opcode::FileAppend
+                | Opcode::FileExists
+                | Opcode::FileDelete
+                | Opcode::DirList
+                | Opcode::DirMake
+                | Opcode::PathJoin
+                | Opcode::PathParent
+                | Opcode::StrLen
+                | Opcode::StrConcat
+                | Opcode::StrSlice
+                | Opcode::StrSplit
+                | Opcode::StrBytes
+                | Opcode::BytesStr
+                | Opcode::StrConst
+                | Opcode::ExecSpawn
+                | Opcode::ExecCheck
+        )
+    }
+
+    /// Returns true if this opcode has side effects (file/process I/O).
+    /// Pure string/path operations return false.
+    pub fn is_effectful(&self) -> bool {
+        matches!(
+            self,
+            Opcode::FileRead
+                | Opcode::FileWrite
+                | Opcode::FileAppend
+                | Opcode::FileExists
+                | Opcode::FileDelete
+                | Opcode::DirList
+                | Opcode::DirMake
+                | Opcode::ExecSpawn
+                | Opcode::ExecCheck
+        )
     }
 }
 
@@ -321,7 +466,7 @@ mod tests {
 
     #[test]
     fn all_opcodes_count() {
-        assert_eq!(ALL_OPCODES.len(), 47);
+        assert_eq!(ALL_OPCODES.len(), 65);
     }
 
     #[test]
@@ -423,8 +568,28 @@ mod tests {
     }
 
     #[test]
-    fn reserved_expansion_range() {
-        for byte in 0x80..=0xFDu8 {
+    fn reserved_io_file_range() {
+        for byte in 0x89..=0x8Fu8 {
+            assert_eq!(
+                Opcode::try_from(byte),
+                Err(DecodeError::ReservedOpcode(byte))
+            );
+        }
+    }
+
+    #[test]
+    fn reserved_string_range() {
+        for byte in 0x97..=0x9Fu8 {
+            assert_eq!(
+                Opcode::try_from(byte),
+                Err(DecodeError::ReservedOpcode(byte))
+            );
+        }
+    }
+
+    #[test]
+    fn reserved_process_range() {
+        for byte in 0xA2..=0xFDu8 {
             assert_eq!(
                 Opcode::try_from(byte),
                 Err(DecodeError::ReservedOpcode(byte))
