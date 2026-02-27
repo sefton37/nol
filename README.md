@@ -1,6 +1,6 @@
 # NoLang
 
-**A programming language designed for LLM generation, not human authorship.**
+**A programming language that gets rid of the language part; designed for LLM generation, not human authorship.**
 
 ## The Problem
 
